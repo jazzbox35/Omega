@@ -1,5 +1,6 @@
 import hashlib
 import ipaddress
+import json
 import os
 import re
 import socket
@@ -41,9 +42,15 @@ def _browser_command(command):
             try:
                 return function(*args, **kwargs)
             except Exception as exc:
-                _targets = []
+                _clear_targets()
                 _reading = None
                 message = f"BROWSER-{command}-FAILED: {type(exc).__name__}: {exc}"
+                if command == "TYPE":
+                    message += (
+                        "\nDo not retry this text-entry request or press Enter. "
+                        "Text may already be partially entered. Use browser-read to "
+                        "inspect the page and report the failure before taking another action."
+                    )
                 if _download_notice:
                     message += f"\n{_download_notice}"
                     _download_notice = ""
@@ -153,14 +160,14 @@ def _forget_page(tab_id):
     closed = _tabs.pop(tab_id, None)
     if closed is _page:
         _page = next(iter(_tabs.values()), None)
-        _targets = []
+        _clear_targets()
         _reading = None
 
 
 def _select_page(page):
     global _page, _targets, _reading
     _page = page
-    _targets = []
+    _clear_targets()
     _reading = None
 
 
@@ -223,9 +230,22 @@ def _clean(value):
     return " ".join((value or "").split())
 
 
+def _clear_targets():
+    """Release any pinned typing field before replacing the target list."""
+    global _targets
+    previous = _targets
+    _targets = []
+    for target in previous:
+        if hasattr(target, "dispose"):
+            try:
+                target.dispose()
+            except Exception:
+                pass  # A closed page may already have released its handles.
+
+
 def _snapshot():
     global _targets, _download_notice, _reading
-    _targets = []
+    _clear_targets()
     _reading = None
     if _page is None:
         raise RuntimeError("no selected tab; call browser-open first")
@@ -249,59 +269,36 @@ def _snapshot():
         "textarea:visible, [contenteditable='true' i]:visible, "
         "[contenteditable='']:visible, [contenteditable='plaintext-only' i]:visible"
     )
-    _targets = []
+    # Read metadata in one browser call, rather than several calls per control.
+    controls = candidates.evaluate_all(r"""elements => {
+        const clean = value => (value || '').replace(/\s+/g, ' ').trim();
+        return {count: elements.length, items: elements.slice(0, 200).map(el => {
+            const field = el.matches('input, textarea');
+            const textField = el.matches('textarea') || (el.matches('input') &&
+                ['text', 'search', 'email', 'password', 'tel', 'url', 'number'].includes(el.type));
+            const dropdown = el.matches('select');
+            const disabled = el.matches(':disabled') ||
+                !!el.closest('[aria-disabled="true"]');
+            const label = clean(field || dropdown ? '' : el.innerText) ||
+                clean(el.getAttribute('aria-label')) || clean(el.getAttribute('title')) ||
+                clean(el.getAttribute('placeholder')) || clean(el.getAttribute('name')) ||
+                clean(field ? '' : el.getAttribute('value')) || 'unlabelled control';
+            return {label: label.slice(0, 240), dropdown, disabled,
+                editable: (textField || el.isContentEditable) && !disabled &&
+                    !el.readOnly && el.getAttribute('aria-readonly') !== 'true'};
+        })};
+    }""")
     lines = []
-    for index in range(min(candidates.count(), 200)):
-        candidate = candidates.nth(index)
-        try:
-            is_field = bool(candidate.locator("xpath=self::input | self::textarea").count())
-            label = _clean(candidate.inner_text(timeout=500))
-            if not label:
-                label = _clean(candidate.get_attribute("aria-label"))
-            if not label:
-                label = _clean(candidate.get_attribute("title"))
-            if not label:
-                label = _clean(candidate.get_attribute("placeholder"))
-            if not label and is_field:
-                label = _clean(candidate.get_attribute("name"))
-            if not label and not is_field:
-                label = _clean(candidate.get_attribute("value"))
-            if not label:
-                label = "unlabelled control"
-            _targets.append(candidate)
-            lines.append(f"[{len(_targets)}] {label[:240]}")
-            editable_attribute = candidate.get_attribute("contenteditable")
-            is_contenteditable = (
-                editable_attribute is not None
-                and editable_attribute.lower() in {"", "true", "plaintext-only"}
-            )
-            if (is_field or is_contenteditable) and candidate.is_editable():
-                lines.append("  EDITABLE: use browser-type with this target number")
-            if candidate.locator("xpath=self::select").count():
-                state = "enabled" if candidate.is_enabled() else "disabled"
-                lines.append(f"  DROPDOWN ({state}): use browser-select with this target number")
-                options = candidate.locator("option")
-                for option_index in range(min(options.count(), 200)):
-                    option = options.nth(option_index)
-                    option_label = option.get_attribute("label")
-                    if option_label is None:
-                        option_label = _clean(option.text_content(timeout=_timeout_ms))
-                    value = option.get_attribute("value")
-                    if value is None:
-                        value = _clean(option.text_content(timeout=_timeout_ms))
-                    flags = []
-                    if option.is_disabled():
-                        flags.append("disabled")
-                    lines.append(f"    label={option_label!r} value={value!r}" + (f" ({', '.join(flags)})" if flags else ""))
-                if options.count() > 200:
-                    lines.append("    OPTIONS_TRUNCATED: first 200 options shown")
-                selected_options = candidate.locator("option:checked")
-                selected_labels = selected_options.all_text_contents()
-                lines.append(f"  SELECTED_OPTION_TEXT: {selected_labels!r}")
-        except Exception as exc:
-            raise RuntimeError(
-                f"could not read click target {index + 1}: {type(exc).__name__}: {exc}"
-            ) from exc
+    for index, control in enumerate(controls["items"]):
+        _targets.append(candidates.nth(index))
+        lines.append(f"[{index + 1}] {control['label']}")
+        if control["editable"]:
+            lines.append("  EDITABLE: browser-type fills; for search, click the associated Search button or use Enter if none")
+        if control["dropdown"]:
+            state = "disabled" if control["disabled"] else "enabled"
+            lines.append(f"  DROPDOWN ({state}): browser-options lists choices; browser-select selects")
+    if controls["count"] > 200:
+        lines.append(f"TARGETS_TRUNCATED: showing 200 of {controls['count']}")
 
     targets = "\n".join(lines) if lines else "(none)"
     notice = _download_notice
@@ -504,7 +501,95 @@ def click_target(target):
 
 
 @_browser_command("TYPE")
-def type_text(target, text):
+def type_text(target, text=None):
+    global _targets, _reading, _download_notice
+    # The bot parser combines the field number and text into one string.
+    # Keep accepting separate arguments for direct calls as well.
+    if text is None:
+        match = re.fullmatch(r'\s*(?:"([0-9]+)"|([0-9]+))\s+([\s\S]*)', str(target))
+        if match is None:
+            raise ValueError('expected a field number followed by text, for example: 11 "search terms"')
+        target = match.group(1) or match.group(2)
+        text = match.group(3)
+        if text.startswith('"'):
+            try:
+                text = json.loads(text)
+            except ValueError:
+                raise ValueError("text has invalid quoting; use a double-quoted string") from None
+    page = _require_page()
+    try:
+        index = int(str(target).strip()) - 1
+    except ValueError:
+        raise ValueError("target must be a field number from the latest snapshot") from None
+    if index < 0 or index >= len(_targets):
+        raise ValueError("target is not present in the latest snapshot; call browser-read first")
+    field = _targets[index]
+    value = str(text)
+    _reading = None
+    stage = "resolving the field"
+    attempts = 0
+    # Pin the element so validation, filling and
+    # verification cannot silently switch controls after a DOM update.
+    try:
+        if hasattr(field, "element_handle"):
+            field = field.element_handle(timeout=_timeout_ms)
+            _clear_targets()
+            if field is None:
+                raise ValueError("field is no longer present")
+            _targets = [field]
+        stage = "checking the field is visible and editable"
+        if not field.is_visible() or not field.is_editable():
+            raise ValueError("field is hidden, disabled, read-only, or not editable")
+        for attempts in range(1, 4):  # Initial attempt plus at most two retries.
+            try:
+                stage = "filling the field"
+                field.fill(value, timeout=_timeout_ms)
+                stage = "checking the selected tab after filling"
+                if page.is_closed() or _page is not page:
+                    raise RuntimeError("selected tab changed or closed")
+                stage = "verifying that the field contains the requested text"
+                matches = field.evaluate(r"""(el, expected) => {
+                    if (!el.isConnected) return false;
+                    if (el.matches('input, textarea')) {
+                        if (el.matches('textarea')) expected = expected.replace(/\r\n?/g, '\n');
+                        return el.value === expected;
+                    }
+                    if (el.isContentEditable) {
+                        const normalize = value => value.replace(/\r\n?/g, '\n');
+                        return normalize(el.innerText) === normalize(expected);
+                    }
+                    return false;
+                }""", value)
+                if not matches:
+                    raise ValueError("field contents differ or the field was replaced")
+                break
+            except Exception:
+                if attempts == 3 or page.is_closed() or _page is not page:
+                    raise
+                if not field.evaluate("el => el.isConnected"):
+                    raise
+    except Exception as exc:
+        # Playwright call logs can include supplied text. Report only the
+        # failed stage and exception class, never the raw exception or values.
+        raise RuntimeError(
+            f"{stage} failed ({type(exc).__name__}); {attempts} fill attempt(s), "
+            "at most 2 retries allowed"
+        ) from None
+    notice = _download_notice
+    _download_notice = ""
+    return (
+        "BROWSER-TYPE-OK: field contents verified\n[1] Field just filled\n"
+        "No Enter was pressed. Previous target numbers are invalid. "
+        "For search, call browser-read. If results already updated, do not submit again. "
+        "Otherwise click the Search button associated with this field; if none is available, "
+        "use browser-press-enter on the search field. Use target numbers from the new snapshot "
+        "and inspect results afterward. Target 1 refers to this field only until that snapshot."
+        + (f"\n{notice}" if notice else "")
+    )
+
+
+@_browser_command("PRESS-ENTER")
+def press_enter(target):
     page = _require_page()
     try:
         index = int(str(target).strip()) - 1
@@ -515,19 +600,44 @@ def type_text(target, text):
     field = _targets[index]
     if not field.is_editable():
         raise ValueError("target is not editable or is disabled/read-only")
-    # fill replaces the contents and dispatches input events without pressing
-    # Enter. Do not include the supplied text in our error or log messages.
-    try:
-        field.fill(str(text), timeout=_timeout_ms)
-    except Exception as exc:
-        raise RuntimeError(
-            f"could not fill field ({type(exc).__name__}); check the target type and state"
-        ) from None
+    field.press("Enter", timeout=_timeout_ms)
     if page.is_closed() or _page is not page:
-        raise RuntimeError("selected tab closed during typing; use browser-tabs")
+        raise RuntimeError("selected tab closed after pressing Enter; use browser-tabs")
+    page.wait_for_load_state("domcontentloaded", timeout=_timeout_ms)
     if _settle_ms:
         page.wait_for_timeout(_settle_ms)
     return _snapshot()
+
+
+@_browser_command("OPTIONS")
+def list_options(target):
+    _require_page()
+    try:
+        index = int(str(target).strip()) - 1
+    except ValueError:
+        raise ValueError("target must be a dropdown number from the latest snapshot") from None
+    if index < 0 or index >= len(_targets):
+        raise ValueError("target is not present in the latest snapshot; call browser-read first")
+    data = _targets[index].evaluate("""el => {
+        if (el.tagName !== 'SELECT') return null;
+        return {count: el.options.length,
+            options: Array.from(el.options).slice(0, 200).map(option => ({
+                label: option.label, value: option.value, selected: option.selected,
+                disabled: el.matches(':disabled') || option.matches(':disabled')
+            }))};
+    }""")
+    if data is None:
+        raise ValueError("target is not a native dropdown; use browser-click for custom menus")
+    lines = [f"BROWSER-OPTIONS target={index + 1}"]
+    for option in data["options"]:
+        flags = [name for name in ("disabled", "selected") if option[name]]
+        lines.append(
+            f"label={option['label']!r} value={option['value']!r}"
+            + (f" ({', '.join(flags)})" if flags else "")
+        )
+    if data["count"] > 200:
+        lines.append("OPTIONS_TRUNCATED: first 200 options shown")
+    return "\n".join(lines)
 
 
 @_browser_command("SELECT")
@@ -540,7 +650,7 @@ def select_dropdown(target, choice):
     if index < 0 or index >= len(_targets):
         raise ValueError("target is not present in the latest snapshot; call browser-read first")
     dropdown = _targets[index]
-    if not dropdown.locator("xpath=self::select").count():
+    if not dropdown.evaluate("el => el.tagName === 'SELECT'"):
         raise ValueError("target is not a native dropdown; use browser-click for custom menus")
     if dropdown.is_disabled():
         raise ValueError("dropdown is disabled")
@@ -565,7 +675,7 @@ def select_dropdown(target, choice):
             value_matches.append(option_index)
     matches = label_matches or value_matches
     if not matches:
-        raise ValueError("option not found; use an exact label or value from browser-read")
+        raise ValueError("option not found; use an exact label or value from browser-options")
     if len(matches) != 1:
         raise ValueError("option is ambiguous; use a unique option label or value")
     if options.nth(matches[0]).is_disabled():
@@ -714,7 +824,7 @@ def close_browser():
         _browser = None
         _context = None
         _page = None
-        _targets = []
+        _clear_targets()
         _explicit_download = None
         _download_notice = ""
         _tabs.clear()

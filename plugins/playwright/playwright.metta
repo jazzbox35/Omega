@@ -76,11 +76,17 @@
                     "Click a numbered target from the latest browser page snapshot and return the resulting page snapshot"
                     (target_number))
          (add-skill browser-select
-                    "Select one option in a native dropdown using its target number and exact option label or value from browser-read; labels take precedence; replaces any prior selections and returns a fresh snapshot; errors return BROWSER-SELECT-FAILED"
+                    "Select one option in a native dropdown using its target number and exact option label or value from browser-options; labels take precedence; replaces any prior selections and returns a fresh snapshot; errors return BROWSER-SELECT-FAILED"
                     (target_number option_in_quotes))
+         (add-skill browser-options
+                    "List up to 200 options for one native dropdown using its target number from browser-read. Shows labels, values, disabled and selected states without scanning the rest of the page. Target numbers are unchanged. Use browser-select to choose an option."
+                    (target_number))
          (add-skill browser-type
-                    "Replace an editable field's contents with text using its target number from the latest snapshot; empty text clears it. Returns a fresh snapshot without pressing Enter; click a search or submit button separately. Errors return BROWSER-TYPE-FAILED"
+                    "Fill a visible editable field and verify its contents; empty text clears it. Allows up to 2 retries after the initial attempt (3 total). Does not submit. Returns a brief confirmation; ONLY target 1 refers to the filled field until the next snapshot. Default search workflow: after success call browser-read; if results already updated, stop. Otherwise browser-click the Search button associated with that field; if none is available, browser-press-enter on the search field. Use the refreshed target numbers and inspect results afterward. On BROWSER-TYPE-FAILED do not start another retry cycle or submit: inspect and report the failure. Text may be partially entered."
                     (target_number text_in_quotes))
+         (add-skill browser-press-enter
+                    "Press Enter in an editable field. For search, first use browser-read and prefer clicking the Search button associated with the field; use Enter if no such button is available. Never submit after failed typing or if results already updated. Use the search field number from the latest snapshot (target 1 only immediately after browser-type). Waits for DOM loading and the settling delay, then returns a fresh snapshot; inspect results to confirm success. In multiline fields Enter may insert a newline. Errors return BROWSER-PRESS-ENTER-FAILED"
+                    (target_number))
          (add-skill browser-scroll
                     "Scroll the current page up or down by a pixel amount, then return a refreshed page snapshot; positive numbers scroll down and negative numbers scroll up"
                     (pixel_amount))
@@ -145,8 +151,18 @@
 (= (browser-select $target $option)
    (py-call (playwright_bridge.select_dropdown $target $option)))
 
+(= (browser-options $target)
+   (py-call (playwright_bridge.list_options $target)))
+
 (= (browser-type $target $text)
    (py-call (playwright_bridge.type_text $target $text)))
+
+; Accept the bot parser's combined field-number-and-text string.
+(= (browser-type $request)
+   (py-call (playwright_bridge.type_text $request)))
+
+(= (browser-press-enter $target)
+   (py-call (playwright_bridge.press_enter $target)))
 
 (= (browser-scroll $pixels)
    (py-call (playwright_bridge.scroll_page $pixels)))

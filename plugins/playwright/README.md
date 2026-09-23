@@ -37,17 +37,54 @@ with a deliberately narrow interface:
   apply when opening them. This list does not assign click target numbers.
 - `browser-click 3` clicks target 3 from the latest snapshot.
 - `browser-type 3 "search terms"` replaces the contents of editable target 3
-  and returns a fresh snapshot. Empty text clears the field. Supports native
+  and returns a short confirmation without reading the page or waiting for
+  the settling delay. Empty text clears the field. Supports native
   text/search/email/password/URL/telephone/number inputs, textareas, and
-  contenteditable fields. Use the refreshed target numbers to click a search
-  or submit button separately; typing does not press Enter, though site input
+  contenteditable fields. After success, **only target 1 is valid**: it refers
+  to the exact element just filled. The function fills and verifies the
+  field's contents, allowing up to two retries after the initial attempt
+  (three attempts total). It stops early if the page closes or changes tabs,
+  or the field detaches. There is no keyboard fallback. Verification checks
+  the current value, not future site updates.
+  If the site replaces that element, obtain current targets with `browser-read`.
+  Use `browser-read` to inspect suggestions or find a search button.
+  Typing does not press Enter, though site input
   handlers may trigger searches or other actions. Invalid targets, unsupported
   field types, read-only/disabled fields, and execution errors return
   `BROWSER-TYPE-FAILED`. Supplied text is omitted from fill error messages.
+
+  On failure, do not repeat the text-entry request or press Enter. Inspect
+  with `browser-read` and report the failure; text may already be partially
+  entered. For searches, clicking the associated Search button is the default;
+  Enter is the fallback when no such button is available.
+
+- `browser-press-enter 3` presses Enter in editable target 3, waits for DOM
+  loading and the configured settling delay, and returns a fresh snapshot.
+  This command takes only a field number. In multiline fields, Enter may
+  insert a newline instead of submitting. Errors return
+  `BROWSER-PRESS-ENTER-FAILED`.
+
+  Search workflow:
+
+  1. Find the search field marked `EDITABLE` in the latest snapshot.
+  2. Call `browser-type` with that field number and the search text.
+  3. Check for `BROWSER-TYPE-OK`. If typing failed, stop text entry, inspect
+     the page and report the failure. Do not retry typing or press Enter.
+  4. Inspect the page with `browser-read`. If results already updated, do not
+     submit again. Otherwise, click the Search button associated with that
+     field using `browser-click`. If no such button is available, call
+     `browser-press-enter` on the search field. Use target numbers from this
+     fresh snapshot, not the numbers from before typing.
+  5. Inspect the resulting page to confirm the search completed. If results
+     are still loading, use `browser-wait` before reading them again.
+
+- `browser-options 3` lists up to 200 options for native dropdown target 3,
+  including labels, values, disabled and selected states. Target numbers stay
+  unchanged. Snapshots identify dropdowns but do not enumerate their options.
+
 - `browser-select 3 "English"` selects an option in native dropdown target 3
-  and returns a fresh snapshot. Snapshots mark dropdowns and show option labels,
-  values, disabled state, and currently selected option text. Up to 200 options
-  per dropdown are shown, with truncation marked. Matching is exact and
+  and returns a fresh snapshot. Use `browser-options` to see the choices first.
+  Matching is exact and
   case-sensitive: labels take precedence over values. Missing, ambiguous,
   disabled, or non-dropdown targets/options return `BROWSER-SELECT-FAILED`;
   browser execution errors use the same prefix. Selection chooses one option
@@ -69,6 +106,11 @@ selected tab. Tab IDs remain stable until closed and reset after
 selected tab; switching tabs refreshes them. Popups are also listed as tabs,
 but do not automatically change the selection.
 
+Snapshots collect control descriptions in one browser call, with a maximum
+of 200 controls. Dropdown options are read only by `browser-options` or during
+selection. Typing skips the full snapshot and invalidates the previous text
+reading; use `browser-read` before requesting `browser-read-more` again.
+
 Tabs share one browser context, including cookies and origin-scoped local
 storage. Closing the last tab keeps that context alive; `browser-close`
 discards it. Each `browser-open` now creates a tab; use `browser-navigate`
@@ -89,7 +131,9 @@ are normal results, not failures.
 
 Standard controls and common custom click controls (`role`, `onclick`, and
 `tabindex`) are numbered. A configurable settling delay allows client-rendered
-output to appear after a click, typing, or scroll. There are no skills for
+output to appear after a click, Enter, selection, or scroll. Typing returns
+immediately after filling; use `browser-wait` to inspect delayed suggestions.
+There are no skills for
 directly setting cookies, uploading files,
 evaluating JavaScript, or restoring a prior browser profile. Downloads require
 the explicit `browser-download` skill; downloads triggered by ordinary clicks
