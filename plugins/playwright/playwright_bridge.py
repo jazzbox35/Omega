@@ -1,3 +1,11 @@
+# -----------------------------------------------------------------------------
+# Function: Execute Omega browser skill calls using Playwright, a browser automation
+#           library that requires a real browser (Chromium, Firefox, or WebKit)
+#           which can run headlessly without a visible window.
+# Inputs:   Skill calls with browser action arguments, plus browser settings.
+# Outputs:  Page snapshots, command results/errors, screenshots, and downloads.
+# -----------------------------------------------------------------------------
+
 import hashlib
 import ipaddress
 import json
@@ -13,6 +21,7 @@ from src.logger import get_logger
 
 logger = get_logger(__name__)
 
+# Browser settings
 _browser_name = "chromium"
 _headless = True
 _timeout_ms = 15_000
@@ -23,6 +32,7 @@ _max_download_bytes = 10 * 1024 * 1024
 _explicit_download = None
 _download_notice = ""
 
+# Browser session state
 _playwright = None
 _browser = None
 _context = None
@@ -32,7 +42,12 @@ _tabs = {}
 _next_tab_id = 1
 _reading = None
 
+############################################################################
+# Utility functions supporting browser skill calls: validation, session
+# management, page snapshots, downloads, error handling, etc.
+############################################################################
 
+# Wrap browser commands with consistent error reporting for skill calls.
 def _browser_command(command):
     """Return skill-visible errors for validation and browser exceptions."""
     def decorate(function):
@@ -60,10 +75,12 @@ def _browser_command(command):
     return decorate
 
 
+# Convert a setting value to a boolean using common true values.
 def _as_bool(value):
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+# Validate and store browser settings and prepare the download directory.
 def configure(browser_name="chromium", headless=True, timeout_ms=15000,
               max_text_chars=20000, settle_ms=750, download_dir="",
               max_download_bytes=10485760):
@@ -85,6 +102,7 @@ def configure(browser_name="chromium", headless=True, timeout_ms=15000,
     return True
 
 
+# Validate an HTTP or HTTPS URL and reject credentials and non-public addresses.
 def _validate_public_url(url):
     value = str(url).strip().strip('"')
     parsed = urlsplit(value)
@@ -110,6 +128,7 @@ def _validate_public_url(url):
     return value
 
 
+# Allow browser requests only when their URLs pass public-address validation.
 def _route_request(route):
     try:
         _validate_public_url(route.request.url)
@@ -119,6 +138,7 @@ def _route_request(route):
         route.abort("blockedbyclient")
 
 
+# Return the browser session, starting Playwright and the browser if needed.
 def _ensure_context():
     global _playwright, _browser, _context
     if _context is not None:
@@ -142,6 +162,7 @@ def _ensure_context():
     return _context
 
 
+# Track a new tab and attach dialog, download, and close handlers.
 def _register_page(page):
     """Track explicit tabs and popups without changing the selected tab."""
     global _next_tab_id
@@ -155,6 +176,7 @@ def _register_page(page):
     page.on("close", lambda: _forget_page(tab_id))
 
 
+# Remove a closed tab and select a remaining tab when necessary.
 def _forget_page(tab_id):
     global _page, _targets, _reading
     closed = _tabs.pop(tab_id, None)
@@ -164,6 +186,7 @@ def _forget_page(tab_id):
         _reading = None
 
 
+# Select a tab and clear the previous interaction targets and saved text.
 def _select_page(page):
     global _page, _targets, _reading
     _page = page
@@ -171,6 +194,7 @@ def _select_page(page):
     _reading = None
 
 
+# Format the open tab IDs and URLs and mark the selected tab.
 def _tab_list():
     lines = ["BROWSER-TABS"]
     for tab_id, page in list(_tabs.items()):
@@ -179,11 +203,7 @@ def _tab_list():
     return "\n".join(lines) if _tabs else "BROWSER-TABS: (none)"
 
 
-@_browser_command("TABS")
-def list_tabs():
-    return _tab_list()
-
-
+# Look up a tab by ID, returning None if the ID is invalid or unknown.
 def _find_tab(tab_id):
     try:
         return _tabs.get(int(str(tab_id).strip()))
@@ -191,24 +211,7 @@ def _find_tab(tab_id):
         return None
 
 
-@_browser_command("SWITCH")
-def switch_tab(tab_id):
-    page = _find_tab(tab_id)
-    if page is None:
-        raise ValueError("use a tab ID from browser-tabs")
-    _select_page(page)
-    return _snapshot()
-
-
-@_browser_command("CLOSE-TAB")
-def close_tab(tab_id):
-    page = _find_tab(tab_id)
-    if page is None:
-        raise ValueError("use a tab ID from browser-tabs")
-    page.close()
-    return _tab_list()
-
-
+# Cancel downloads that were not explicitly requested and record a notice.
 def _handle_download(download):
     """Cancel downloads unless browser-download deliberately initiated one."""
     global _download_notice
@@ -226,10 +229,12 @@ def _handle_download(download):
             logger.error(f"[PLAYWRIGHT] {_download_notice}")
 
 
+# Collapse whitespace in text into single spaces and trim its ends.
 def _clean(value):
     return " ".join((value or "").split())
 
 
+# Clear interaction targets and release any pinned element handles.
 def _clear_targets():
     """Release any pinned typing field before replacing the target list."""
     global _targets
@@ -243,6 +248,7 @@ def _clear_targets():
                 pass  # A closed page may already have released its handles.
 
 
+# Capture page text and numbered interaction targets, saving remaining text for later reads.
 def _snapshot():
     global _targets, _download_notice, _reading
     _clear_targets()
@@ -315,6 +321,86 @@ def _snapshot():
     return result
 
 
+# Return the selected open tab or raise an error if none is available.
+def _require_page():
+    if _page is None or _page.is_closed():
+        raise RuntimeError("no selected open tab; call browser-open first")
+    return _page
+
+
+# Perform a history or reload action and return the updated page snapshot.
+def _history_action(method):
+    page = _require_page()
+    _select_page(page)
+    # A missing history entry is a harmless no-op; same-document history can
+    # also return no response, so do not infer failure from a None response.
+    getattr(page, method)(wait_until="domcontentloaded", timeout=_timeout_ms)
+    if _settle_ms:
+        page.wait_for_timeout(_settle_ms)
+    return _snapshot()
+
+
+# Sanitize a suggested download filename and limit its length.
+def _safe_download_name(suggested):
+    name = os.path.basename(str(suggested or "download"))
+    name = re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("._")
+    if not name:
+        name = "download"
+    return name[:180]
+
+
+# Choose an unused file path within the configured download directory.
+def _unused_download_path(filename):
+    stem, extension = os.path.splitext(filename)
+    candidate = os.path.join(_download_dir, filename)
+    number = 1
+    while os.path.exists(candidate):
+        candidate = os.path.join(_download_dir, f"{stem}-{number}{extension}")
+        number += 1
+    candidate = os.path.realpath(candidate)
+    if os.path.commonpath((_download_dir, candidate)) != _download_dir:
+        raise ValueError("unsafe download filename")
+    return candidate
+
+
+# Log and return a download failure message with the download directory.
+def _download_error(reason):
+    message = f"BROWSER-DOWNLOAD-FAILED: {reason}; download directory: {_download_dir}"
+    logger.error(f"[PLAYWRIGHT] {message}")
+    return message
+
+
+############################################################################
+# Browser commands invoked by skill calls.
+############################################################################
+
+# List open tabs and identify the selected tab.
+@_browser_command("TABS")
+def list_tabs():
+    return _tab_list()
+
+
+# Switch to the specified tab and return its page snapshot.
+@_browser_command("SWITCH")
+def switch_tab(tab_id):
+    page = _find_tab(tab_id)
+    if page is None:
+        raise ValueError("use a tab ID from browser-tabs")
+    _select_page(page)
+    return _snapshot()
+
+
+# Close the specified tab and list the remaining tabs.
+@_browser_command("CLOSE-TAB")
+def close_tab(tab_id):
+    page = _find_tab(tab_id)
+    if page is None:
+        raise ValueError("use a tab ID from browser-tabs")
+    page.close()
+    return _tab_list()
+
+
+# Open a public URL in a new tab and return its page snapshot.
 @_browser_command("OPEN")
 def open_page(url):
     safe_url = _validate_public_url(url)
@@ -334,6 +420,7 @@ def open_page(url):
     return _snapshot()
 
 
+# Navigate the selected tab to a public URL and return its page snapshot.
 @_browser_command("NAVIGATE")
 def navigate_page(url):
     if _page is None:
@@ -344,11 +431,13 @@ def navigate_page(url):
     return _snapshot()
 
 
+# Return the selected page's text and numbered interaction targets.
 @_browser_command("READ")
 def read_page():
     return _snapshot()
 
 
+# Save a full-page screenshot of the selected tab.
 @_browser_command("SCREENSHOT")
 def screenshot_page():
     page = _require_page()
@@ -373,38 +462,25 @@ def screenshot_page():
     return f"BROWSER-SCREENSHOT-SAVED file={destination} bytes={size} tab={tab_id}"
 
 
-def _require_page():
-    if _page is None or _page.is_closed():
-        raise RuntimeError("no selected open tab; call browser-open first")
-    return _page
-
-
-def _history_action(method):
-    page = _require_page()
-    _select_page(page)
-    # A missing history entry is a harmless no-op; same-document history can
-    # also return no response, so do not infer failure from a None response.
-    getattr(page, method)(wait_until="domcontentloaded", timeout=_timeout_ms)
-    if _settle_ms:
-        page.wait_for_timeout(_settle_ms)
-    return _snapshot()
-
-
+# Go back in the selected tab's history and return its page snapshot.
 @_browser_command("BACK")
 def back_page():
     return _history_action("go_back")
 
 
+# Go forward in the selected tab's history and return its page snapshot.
 @_browser_command("FORWARD")
 def forward_page():
     return _history_action("go_forward")
 
 
+# Reload the selected tab and return its page snapshot.
 @_browser_command("RELOAD")
 def reload_page():
     return _history_action("reload")
 
 
+# Return the next portion of text from the saved page snapshot.
 @_browser_command("READ-MORE")
 def read_more():
     global _reading
@@ -421,6 +497,7 @@ def read_more():
     )
 
 
+# Search the selected page's text and return matching excerpts.
 @_browser_command("FIND")
 def find_text(query):
     page = _require_page()
@@ -450,6 +527,7 @@ def find_text(query):
     return f"BROWSER-FIND\nURL: {page.url}\n{result}"
 
 
+# List visible links and their destinations on the selected page.
 @_browser_command("LINKS")
 def list_links():
     page = _require_page()
@@ -480,6 +558,7 @@ def list_links():
     )
 
 
+# Click a numbered target and return the updated page snapshot.
 @_browser_command("CLICK")
 def click_target(target):
     if _page is None:
@@ -500,6 +579,7 @@ def click_target(target):
     return _snapshot()
 
 
+# Fill an editable target with text and verify its contents.
 @_browser_command("TYPE")
 def type_text(target, text=None):
     global _targets, _reading, _download_notice
@@ -588,6 +668,7 @@ def type_text(target, text=None):
     )
 
 
+# Press Enter in an editable target and return the updated page snapshot.
 @_browser_command("PRESS-ENTER")
 def press_enter(target):
     page = _require_page()
@@ -609,6 +690,7 @@ def press_enter(target):
     return _snapshot()
 
 
+# List the choices available in a native dropdown target.
 @_browser_command("OPTIONS")
 def list_options(target):
     _require_page()
@@ -640,6 +722,7 @@ def list_options(target):
     return "\n".join(lines)
 
 
+# Select a native dropdown option by its label or value.
 @_browser_command("SELECT")
 def select_dropdown(target, choice):
     page = _require_page()
@@ -688,6 +771,7 @@ def select_dropdown(target, choice):
     return _snapshot()
 
 
+# Scroll the selected page vertically and return its page snapshot.
 @_browser_command("SCROLL")
 def scroll_page(pixels):
     if _page is None:
@@ -703,6 +787,7 @@ def scroll_page(pixels):
     return _snapshot()
 
 
+# Wait for the specified duration and return the page snapshot.
 @_browser_command("WAIT")
 def wait_and_read(milliseconds):
     if _page is None:
@@ -716,33 +801,7 @@ def wait_and_read(milliseconds):
     return _snapshot()
 
 
-def _safe_download_name(suggested):
-    name = os.path.basename(str(suggested or "download"))
-    name = re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("._")
-    if not name:
-        name = "download"
-    return name[:180]
-
-
-def _unused_download_path(filename):
-    stem, extension = os.path.splitext(filename)
-    candidate = os.path.join(_download_dir, filename)
-    number = 1
-    while os.path.exists(candidate):
-        candidate = os.path.join(_download_dir, f"{stem}-{number}{extension}")
-        number += 1
-    candidate = os.path.realpath(candidate)
-    if os.path.commonpath((_download_dir, candidate)) != _download_dir:
-        raise ValueError("unsafe download filename")
-    return candidate
-
-
-def _download_error(reason):
-    message = f"BROWSER-DOWNLOAD-FAILED: {reason}; download directory: {_download_dir}"
-    logger.error(f"[PLAYWRIGHT] {message}")
-    return message
-
-
+# Click a target to download a file, enforce the size limit, and verify the saved file.
 @_browser_command("DOWNLOAD")
 def download_target(target):
     global _explicit_download
@@ -803,6 +862,7 @@ def download_target(target):
         _explicit_download = None
 
 
+# Close the browser session and clear its tracked state.
 @_browser_command("CLOSE")
 def close_browser():
     global _playwright, _browser, _context, _page, _targets, _explicit_download
