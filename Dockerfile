@@ -37,7 +37,7 @@ RUN python3 -m pip install --no-cache-dir --break-system-packages \
     --extra-index-url https://pypi.org/simple/ \
     torch==2.12.1 \
  && python3 -m pip install --no-cache-dir --break-system-packages -r /tmp/requirements.txt
-RUN python3 -m playwright install chromium
+RUN python3 -m playwright install --only-shell chromium
 
 # Build dependencies from source. Pin refs at build time for reproducibility.
 ARG PETTA_REPO=https://github.com/trueagi-io/PeTTa.git
