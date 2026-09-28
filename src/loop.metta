@@ -111,9 +111,9 @@
                                        ($_ (change-state! &error ()))
                                        ($_ (log INFO "loop" (RESPONSE: $resp)))
                                        ($_ (messagesClear))
-                                       ($_ (messagesAppend (llmRequestMessage role "assistant"
-                                                                              calls (llmResponseCalls $response)
-                                                                              content "[TOOL CALL]")))
+                                       ($_ (messagesAppend (llmToolCallMessage role "assistant"
+                                                                               calls (llmResponseCalls $response)
+                                                                               content "[TOOL CALL]")))
                                        ($sexpr (collapse
                                              (let ($callid $s) (superpose $resp)
                                                (let $result
@@ -122,7 +122,7 @@
                                                      (if (HandleError $rc $error) $error (strings-concat ("SUCCESS, RETURN: " $rc)))))
                                                  (progn
                                                    ($_ (log INFO "loop" (COMMAND_RETURN: ($s $result))))
-                                                   (messagesAppend (llmRequestMessage role "tool" callid $callid content $result))i
+                                                   (messagesAppend (llmToolCallResponseMessage role "tool" callid $callid content $result))i
                                                    (quote $s)))))))
                                        (if (or $msgnew  (not (== $sexpr ()))) (addToHistory $msg $sexpr $msgnew) _))
                                 (if (> (get_time) (get-state &nextWakeAt))

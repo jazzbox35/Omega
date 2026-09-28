@@ -7,10 +7,10 @@
 (= (llmRequestMessage role $role content $content)
    (py-call (providers.llmRequestMessage $role $content)))
 
-(= (llmRequestMessage role $role callid $callid content $content)
+(= (llmToolCallResponseMessage role $role callid $callid content $content)
    (py-call (providers.llmToolCallResponseMessage $role $callid $content)))
 
-(= (llmRequestMessage role $role calls $calls content $content)
+(= (llmToolCallMessage role $role calls $calls content $content)
    (py-call (providers.llmToolCallMessage $role $calls $content)))
 
 (= (llmRequest $prompt $episodes $max_tokens $reasoning_mode $tools)
