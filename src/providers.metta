@@ -4,12 +4,14 @@
 
 ;(= (flatten ()) ())
 ;(= (flatten $x)
-;    (if (== 1 (size-atom $x)) 
+;    (if (== 1 (size-atom $x))   
 ;      ($x)
 ;      (let $rest (cons-atom (flatten (car-atom $x)) (flatten (cdr-atom $x))) $rest)
 ;    )
 ;)
 
+
+; These function load the prompt into a &temp atomspace for very fast search and deletion.
 (= (create_temp_atoms $prompt_list)
    (if (== $prompt_list ())
       True
@@ -30,6 +32,8 @@
                            1
                            (empty))))
 
+; The default_router can be refined to look for a variety of conditions and keywords.
+; The MeTTa code should be pretty fast
 (= (default_router $prompt $max_tokens $reasoning_mode)
    (let* (
          ($prompt_list (split_string $prompt " " " "))
@@ -47,6 +51,10 @@
 (= (llmProviderStart $provider)
    (py-call (providers.llmProviderStart $provider)))
 
+;-------------------------------------------------------------------------------
+;  Prototype -- $router is the name of the router passed. This case statement can 
+;     be expanded for other modules probably to be located in a new 'routers' directory.
+;-------------------------------------------------------------------------------
 (= (llmProviderChat $prompt $max_tokens $reasoning_mode $router)
    (case $router
       (
