@@ -322,11 +322,17 @@ ESCAPE = str.maketrans({ '"': '\\"', '\\': '\\\\' })
 
 def llmToolCallToSExpr(call: LLMToolCall):
     sexpr = f"({call.name} "
-    for parameter in call.tool.parameters:
-        if parameter.name in call.arguments:
-            arg = call.arguments[parameter.name]
+    if not call.is_error():
+        for parameter in call.tool.parameters:
+            if parameter.name in call.arguments:
+                arg = call.arguments[parameter.name]
+                arg = arg.translate(ESCAPE)
+                sexpr = sexpr + f"\"{arg}\" "
+    else:
+        for arg in call.arguments.values():
             arg = arg.translate(ESCAPE)
             sexpr = sexpr + f"\"{arg}\" "
+
     sexpr = sexpr[:-1] + ")"
     if call.is_error():
         sexpr = f"(Error {sexpr} \"{call.error}\")"
