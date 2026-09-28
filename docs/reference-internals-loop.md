@@ -27,7 +27,7 @@ Also creates shared state slots:
 ## Every turn
 
 1. **Decrement `&loops`** (turns > 1 only).
-2. **Build the prompt** — `getContext` assembles `PROMPT + SKILLS + LAST_SKILL_USE_RESULTS + HISTORY + TIME` plus an output-format instruction requiring a tuple of up to 5 skill s-exprs.
+2. **Build the prompt** — `getContext` assembles `PROMPT + SKILLS + HISTORY + TIME`, plus information about previous tool calls if any and list of available tools.
 3. **Receive** — `(receive)` via the active channel.
 4. **Detect new input** — compare against `&prevmsg`. If different and non-empty, reset `&loops` to `maxNewInputLoops`.
 5. **Set next wake** — `&nextWakeAt := now + wakeupInterval`.

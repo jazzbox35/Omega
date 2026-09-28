@@ -24,7 +24,7 @@ memoryDirectory: "./repos/Omega/memory"
 
 # Memory
 
-# Ceiling on `LAST_SKILL_USE_RESULTS` text fed back into the prompt (chars)
+# Ceiling on a single tool call result text fed back into the prompt (chars)
 maxFeedback: 50000
 # Items returned by `query`
 maxRecallItems: 20

@@ -302,7 +302,7 @@ Four-step pipeline: search NY weather → write `w.txt` with the forecast → wr
 
 ### 25. test_last_skill_results_visible_next_turn_mock.py
 
-Verifies the one-iteration carry of `LAST_SKILL_USE_RESULTS`. Output of a skill call in turn N is exposed to the LLM at turn N+1 via this prompt section. The test does not require the agent to "behave intelligently"; it confirms the carry exists.
+Verifies the one-iteration carry of last tool call results. Output of a skill call in turn N is exposed to the LLM at turn N+1 via this prompt section. The test does not require the agent to "behave intelligently"; it confirms the carry exists.
 
 - Mock answer (turn 1): `(metta "(+ 1 1)")`.
 - Checks: the docker log line `REQUEST:` for the next iteration contains a last tool call section that reflects the metta output.

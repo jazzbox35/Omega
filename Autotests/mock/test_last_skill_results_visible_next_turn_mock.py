@@ -1,6 +1,6 @@
 """
 Mock test: results of skill calls in turn N are exposed to the LLM at
-turn N+1 via the LAST_SKILL_USE_RESULTS section of the assembled prompt.
+turn N+1 via the messages section of the assembled prompt.
 This is a one-iteration carry that lets the agent reference the output
 of (metta ...), (query ...), (shell ...) etc. without persisting it.
 
@@ -28,7 +28,7 @@ def docker_logs():
 
 
 def test_last_skill_results_visible_next_turn_mock(llm, comm):
-    with Checker("LAST_SKILL_USE_RESULTS carries to next iteration (mock)") as c:
+    with Checker("Tool call results carries to next iteration (mock)") as c:
         print(f"\n=== Omega: lastresults carry (run-id {c.run_id}) ===",
               flush=True)
 
@@ -43,7 +43,7 @@ def test_last_skill_results_visible_next_turn_mock(llm, comm):
             f"(+ {c.run_id} 1). Then acknowledge with a short send.",
         )
         # Mock answer uses the sentinel inside metta so we can locate it in
-        # the next iteration's LAST_SKILL_USE_RESULTS.
+        # the next iteration's results.
         llm.set_answer(
             prompt1,
             [

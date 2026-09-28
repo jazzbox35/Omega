@@ -168,10 +168,10 @@ one vector.
 
 ### 7. test_last_skill_results_visible_next_turn_mock.py
 
-Verifies the LAST_SKILL_USE_RESULTS carry: results of skill calls in iteration N appear in the
+Verifies the last tool call results carry: results of skill calls in iteration N appear in the
 assembled PROMPT for iteration N+1.
 
 - Mock answer: `(metta "(quote <sentinel>)") (send "computed")`. The sentinel is placed inside
   the metta expression so it can be located in the next iteration's PROMPT.
 - Checks (via docker logs): the REQUEST line that follows the one carrying REQ-`<run_id>`
-  contains the LAST_SKILL_USE_RESULTS marker and the sentinel string.
+  contains the last tool call results marker and the sentinel string.

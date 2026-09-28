@@ -122,7 +122,7 @@
                                                      (if (HandleError $rc $error) $error (strings-concat ("SUCCESS, RETURN: " $rc)))))
                                                  (progn
                                                    ($_ (log INFO "loop" (COMMAND_RETURN: ($s $result))))
-                                                   (messagesAppend (llmToolCallResponseMessage role "tool" callid $callid content $result))i
+                                                   (messagesAppend (llmToolCallResponseMessage role "tool" callid $callid content (last_chars $result (maxFeedback))))
                                                    (quote $s)))))))
                                        (if (or $msgnew  (not (== $sexpr ()))) (addToHistory $msg $sexpr $msgnew) _))
                                 (if (> (get_time) (get-state &nextWakeAt))
