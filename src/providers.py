@@ -1,6 +1,6 @@
 import config
 import logging
-from typing import List, Self
+from typing import List
 
 logger = logging.getLogger(__name__)
 
@@ -185,11 +185,11 @@ class LLMResponse:
         self.calls: List[LLMToolCall] = []
         self.error = None
 
-    def add_tool_call(self, call: LLMToolCall) -> Self:
+    def add_tool_call(self, call: LLMToolCall):
         self.calls.append(call)
         return self
 
-    def with_error(self, error: str) -> Self:
+    def with_error(self, error: str):
         self.error = error
         return self
 
