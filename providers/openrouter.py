@@ -22,8 +22,9 @@ class OpenRouterProvider(providers.LLMProvider):
     def stop(self) -> None:
         self.delegate.stop()
 
-    def chat(self, prompt: str, max_tokens: int = 6000, reasoning_mode: str = "medium") -> str:
-        return self.delegate.chat(prompt, max_tokens, reasoning_mode)
+    def chat(self, prompt: str, max_tokens: int = 6000, reasoning_mode: str = "medium", tier: str = "economy") -> str:
+        logger.info("[OpenRouterProvider.chat] Received tier=%s", tier)
+        return self.delegate.chat(prompt, max_tokens, reasoning_mode, tier)
 
 def loadOmegaPlugin():
     providers.registerLLMProvider("OpenRouter", OpenRouterProvider())
@@ -78,7 +79,8 @@ class OpenRouterProviderImpl(llm.AIProvider):
         return body
 
 
-    def chat(self, content: str, max_tokens: int = 6000, reasoning: str = "medium", **kwargs) -> str:
+    def chat(self, content: str, max_tokens: int = 6000, reasoning: str = "medium", tier: str = "economy", **kwargs) -> str:
+        logger.info("[OpenRouterProviderImpl.chat] Received tier=%s", tier)
         extra_body = llm._merge_dicts(
             self._openrouter_extra_body(content, reasoning),
             kwargs.pop("extra_body", None),

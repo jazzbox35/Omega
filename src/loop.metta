@@ -6,6 +6,7 @@
 (= (reasoningMode) (empty))
 (= (wakeupInterval) (empty))
 (= (memoryDirectory) (empty))
+(= (router) (empty))
 (= (spamShield) (empty)) ; TODO: this parameter is considered deprecated
 
 (= (initLoop)
@@ -19,6 +20,7 @@
           (configure wakeupInterval 600) ;600=10 minutes
           (configure memoryDirectory
                (joinPath ((py-call (helper.projectRootDirectory)) memory)))
+          (configure router no_router)
           (change-state! &prevmsg "")
           (change-state! &lastresults "")
           (change-state! &loops (maxNewInputLoops))
@@ -93,7 +95,7 @@
                                        ($_ (log INFO "loop" $lastmessage))
                                        ($send (py-str ($prompt :-:-:-: $lastmessage)))
                                        ($_ (log INFO "loop" (CHARS_SENT: (string_length $send) $send)))
-                                       ($respi (llmProviderChat $send (maxOutputToken) (reasoningMode)))
+                                       ($respi (llmProviderChat $send (maxOutputToken) (reasoningMode) (router)))
                                        ($resp (py-call (helper.balance_parentheses $respi)))
                                        ($response (if (== "(" (first_char $resp)) $resp (progn (log INFO "loop" $resp) (repr (REMEMBER:OUTPUT_NOTHING_ELSE_THAN: ((skill arg) ...))))))
                                        ($sexpr (catch (sread $response)))

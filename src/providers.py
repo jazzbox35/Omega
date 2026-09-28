@@ -43,7 +43,7 @@ def llmProviderStart(provider):
         raise RuntimeError(error)
     _llmprovider.start()
 
-def llmProviderChat(prompt, max_tokens, reasoning_mode):
+def llmProviderChat(prompt, max_tokens, reasoning_mode, tier):
     """Chat via selected LLM provider"""
     global _llmprovider
-    return _llmprovider.chat(prompt, max_tokens, reasoning_mode)
+    return _llmprovider.chat(prompt, max_tokens, reasoning_mode, tier)
