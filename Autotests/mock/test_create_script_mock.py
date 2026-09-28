@@ -49,7 +49,7 @@ def test_create_date_script_mock(llm, comm):
         llm.set_answer(
             prompt, [
                 ("shell", { "cmd": f"mkdir -p {TARGET_DIR}" }),
-                ("write-file", { "filename": f"{TARGET_FILE}", "content": "#!/bin/bash\\ndate\\n" }),
+                ("write-file", { "filename": f"{TARGET_FILE}", "content": "#!/bin/bash\ndate\n" }),
                 ("shell", { "cmd": f"chmod +x {TARGET_FILE}" }),
             ]
         )
