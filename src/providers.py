@@ -156,6 +156,14 @@ class LLMRequest:
         self.reasoning_mode = reasoning_mode
         return self
 
+    def add_tool(self, tool: LLMTool):
+        if tool.name in self.tool_by_name:
+            self.tools.remove(self.tool_by_name[tool.name])
+            del self.tool_by_name[tool.name]
+        self.tools.append(tool)
+        self.tool_by_name[tool.name] = tool
+        return self
+
     def with_tools(self, tools: List[LLMTool]):
         self.tools = tools
         self.tool_by_name = { t.name: t for t in tools }
@@ -245,6 +253,7 @@ def _validate_response(request: LLMRequest, response: LLMResponse) -> LLMRespons
             continue
         if not request.has_tool(call.name):
             call.set_error(f"Unknown tool: {call.name!r}")
+            continue
         call.set_tool(request.get_tool(call.name))
         for parameter in call.tool.parameters:
             if not parameter.name in call.arguments:
@@ -308,14 +317,16 @@ def llmToolCallIsError(call: LLMToolCall):
 def llmToolCallGetError(call: LLMToolCall):
     return call.error
 
+ESCAPE = str.maketrans({ '"': '\\"', '\\': '\\\\' })
+
 def llmToolCallToSExpr(call: LLMToolCall):
     sexpr = f"({call.name} "
     for parameter in call.tool.parameters:
         if parameter.name in call.arguments:
             arg = call.arguments[parameter.name]
-            arg = arg.replace('"','\\"')
+            arg = arg.translate(ESCAPE)
             sexpr = sexpr + f"\"{arg}\" "
-    sexpr = sexpr + ")"
+    sexpr = sexpr[:-1] + ")"
     if call.is_error():
         sexpr = f"(Error {sexpr} \"{call.error}\")"
     return f"({call.id} {sexpr})"

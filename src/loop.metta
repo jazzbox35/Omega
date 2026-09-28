@@ -55,7 +55,7 @@
                            (let $errorstr (swrite $result)
                              (progn
                                (change-state! &error $new)
-                               (let $error (strings-concat ("Tool execution failed: " $errorstr))
+                               (let $error (strings-concat ("ALERT_FAILED" $errorstr))
                                  True)))))
       ($else False))))
 
