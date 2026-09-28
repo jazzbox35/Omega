@@ -1,3 +1,4 @@
+import config
 import logging
 from typing import List, Self
 
@@ -135,8 +136,8 @@ class LLMRequest:
 
     def __init__(self):
         self.messages: [LLMMessage] = []
-        self.max_tokens = 6000
-        self.reasoning_mode = "medium"
+        self.max_tokens = config.config_get_by_key("maxOutputToken")
+        self.reasoning_mode = config.config_get_by_key("reasoningMode")
         self.tools = []
         self.tool_by_name = {}
 

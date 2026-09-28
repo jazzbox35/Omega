@@ -26,7 +26,7 @@ LLM_EMPTY_RESPONSE_MESSAGE = (
 
 logger = get_logger(__name__)
 
-def _log_raw(kind, provider: str, model: str, raw: Dict) -> None:
+def _log_raw(kind: str, provider: str, model: str, raw: Dict) -> None:
     logger.debug(f"[{kind}] provider={provider} model={model} raw={raw!r}")
 
 def _log_chat_completion(provider: str, model: str, response) -> None:
@@ -202,7 +202,7 @@ class AIProvider(AbstractAIProvider):
         }
 
     def convert_response(self, raw):
-        response =  LLMResponse()
+        response = LLMResponse()
 
         choice = raw.choices[0]
         message = choice.message
