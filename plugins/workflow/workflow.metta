@@ -57,7 +57,6 @@
                        (change-state! &workflow_active_name $name)
                        (send (strings-concat ("Loaded workflow: " $name
                                      ". Instructions active in context until completion.")))
-                       (addToHistory (strings-concat ("Workflow skills loaded: " $name)))
                      ))))))
 
 (= (workflow-unload-instructions)
@@ -69,7 +68,6 @@
           (unload-workflow-skills)
           (change-state! &workflow_active_name "")
           (send (strings-concat ("Unloaded workflow: " $name)))
-          (addToHistory (strings-concat ("Workflow skills unloaded: " $name)))
        ))))
 
 (= (active-instructions $content)
