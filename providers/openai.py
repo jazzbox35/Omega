@@ -59,10 +59,12 @@ class OpenAIProviderImpl(llm.AIProvider):
             "type": "function",
             "name": tool.name,
             "description": tool.description,
+            "strict": True,
             "parameters": {
                 "type": "object",
                 "properties": { param.name: { "type": "string" } for param in tool.parameters },
-                "required": [ param.name for param in tool.parameters ]
+                "required": [ param.name for param in tool.parameters ],
+                "additionalProperties": False
             }
         }
 
