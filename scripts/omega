@@ -817,6 +817,7 @@ start() {
             ${memory_import_env[@]+"${memory_import_env[@]}"}
             "$image"
             "commchannel=${commchannel}"
+            "playwrightBrowserEnabled=enabled"
             "provider=${provider}"
             "embeddingprovider=${embeddingprovider}"
             "securityPolicyPath=/PeTTa/repos/Omega/profile/policy.yaml"

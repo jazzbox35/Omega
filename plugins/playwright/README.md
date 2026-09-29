@@ -147,7 +147,7 @@ Install the Python dependency and the browser binary outside the agent, then
 set:
 
 ```yaml
-playwrightEnabled: enabled
+playwrightBrowserEnabled: enabled
 ```
 
 Optional settings are `playwrightBrowser` (`chromium`, `firefox`, or `webkit`),
@@ -157,6 +157,6 @@ Optional settings are `playwrightBrowser` (`chromium`, `firefox`, or `webkit`),
 `playwrightMaxDownloadBytes` defaults to 10 MiB. Suggested filenames are
 sanitized and existing files are never overwritten.
 
-The default is `enabled`. Set `playwrightEnabled: disabled` to
+The default is `enabled`. Set `playwrightBrowserEnabled: disabled` to
 turn it off. Playwright browser binaries are not installed or downloaded
 automatically by OmegaClaw.

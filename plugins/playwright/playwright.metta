@@ -1,6 +1,6 @@
 !(import! &self (library Omega ./plugins/playwright/playwright_bridge.py))
 
-(= (playwrightEnabled) (empty))
+(= (playwrightBrowserEnabled) (empty))
 (= (playwrightBrowser) (empty))
 (= (playwrightHeadless) (empty))
 (= (playwrightTimeoutMs) (empty))
@@ -11,7 +11,7 @@
 
 (= (loadOmegaPlugin)
    (progn
-     (configure playwrightEnabled enabled)
+     (configure playwrightBrowserEnabled enabled)
      (configure playwrightBrowser chromium)
      (configure playwrightHeadless True)
      (configure playwrightTimeoutMs 15000)
@@ -20,7 +20,7 @@
      (configure playwrightDownloadDir
                 (joinPath ((memoryDirectory) browser_downloads)))
      (configure playwrightMaxDownloadBytes 10485760)
-     (if (== (playwrightEnabled) enabled)
+     (if (== (playwrightBrowserEnabled) enabled)
        (progn
          (py-call (playwright_bridge.configure
                     (playwrightBrowser)
