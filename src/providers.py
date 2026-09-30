@@ -138,6 +138,7 @@ class LLMRequest:
         self.messages: [LLMMessage] = []
         self.max_tokens = config.config_get_by_key("maxOutputToken")
         self.reasoning_mode = config.config_get_by_key("reasoningMode")
+        self.tier = None
         self.tools = []
         self.tool_by_name = {}
 
@@ -238,10 +239,11 @@ def llmProviderStart(provider):
         raise RuntimeError(error)
     _llmprovider.start()
 
-def llmProviderChat(request):
-    """Chat via selected LLM provider"""
+def llmProviderChat(request, tier=None):
+    """Chat via selected LLM provider with optional routing tier metadata."""
     global _llmprovider
     try:
+        request.tier = tier
         response = _llmprovider.chat(request)
         return _validate_response(request, response)
     except Exception:
