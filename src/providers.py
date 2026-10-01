@@ -1,5 +1,7 @@
 import config
 import logging
+import inspect
+from pprint import pformat
 from typing import List
 
 logger = logging.getLogger(__name__)
@@ -239,11 +241,22 @@ def llmProviderStart(provider):
         raise RuntimeError(error)
     _llmprovider.start()
 
+def llmRequestContentsNormalized(request):
+    """Prefix contents with role_user/role_tool, join, replace [](),.: with spaces, and lowercase."""
+    contents = [
+        f"role_{message.role} {message.content}"
+        for message in request.messages
+        if (type(message) is LLMMessage and message.role == "user")
+        or (type(message) is LLMToolCallResponseMessage and message.role == "tool")
+    ]
+    return " ".join(contents).translate(str.maketrans({char: " " for char in "[](),.:"})).lower()
+
+
 def llmProviderChat(request, tier=None):
-    """Chat via selected LLM provider with optional routing tier metadata."""
+    """Chat with optional tier metadata; MeTTa's "none" sentinel means no tier."""
     global _llmprovider
     try:
-        request.tier = tier
+        request.tier = None if tier == "none" else tier
         response = _llmprovider.chat(request)
         return _validate_response(request, response)
     except Exception:

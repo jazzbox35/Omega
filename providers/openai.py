@@ -23,6 +23,7 @@ class OpenAIProvider(LLMProvider):
         self.delegate.stop()
 
     def chat(self, args: LLMRequest) -> LLMResponse:
+        # Routing tier metadata is intentionally ignored by this provider.
         return self.delegate.chat(args)
 
 def loadOmegaPlugin():
@@ -156,4 +157,3 @@ class OpenAIProviderImpl(llm.AIProvider):
             error = f"Exception while communicating with LLM: {e}"
             logger.exception(f"[AIProvider.chat]: {error}")
             return LLMResponse().with_error(error)
-
