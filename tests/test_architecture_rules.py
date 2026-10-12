@@ -190,11 +190,12 @@ def test_routers_hold_no_credential_and_make_no_call():
         return
     print("check 1 scanned:", scanned)
     assert scanned, "routers/ exists but no .py or .metta file was scanned"
-    assert violations == []
+    assert violations == [], violations
 
 
 def test_providers_decide_nothing():
-    assert check_providers(REPO) == []
+    violations = check_providers(REPO)
+    assert violations == [], violations
 
 
 # --- proof that the rules bite ---------------------------------------------
