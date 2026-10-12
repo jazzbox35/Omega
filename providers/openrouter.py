@@ -46,7 +46,8 @@ class OpenRouterProviderImpl(llm.AIProvider):
     """OpenRouter provider with reasoning mode enabled (reasoning tokens excluded from the response)."""
 
     def _openrouter_extra_body(self, request: providers.LLMRequest) -> dict[str, Any]:
-        is_anthropic = self._model_name.lower().startswith("anthropic/")
+        model = self.effective_model(request)
+        is_anthropic = model.lower().startswith("anthropic/")
         sysmsg = request.messages[0].content
         reasoning = request.reasoning_mode
         # For models that accept only a reasoning token budget (e.g. Anthropic),
@@ -63,7 +64,7 @@ class OpenRouterProviderImpl(llm.AIProvider):
         # Keep this stable per agent/session.
         session_id = config_get_by_key("OPENROUTER_SESSION_ID")
         if not session_id and sysmsg:
-            session_id = llm._stable_cache_key("openrouter", self._model_name, sysmsg)
+            session_id = llm._stable_cache_key("openrouter", model, sysmsg)
 
         if session_id:
             body["session_id"] = session_id[:256]

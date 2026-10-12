@@ -194,9 +194,15 @@ class AIProvider(AbstractAIProvider):
             }
         }
 
+    def effective_model(self, request: LLMRequest) -> str:
+        """The model this call goes to: the one the request names, else the
+        configured one (ADR-0001). Every raw request, cache key and log line
+        reads it, so none of them disagrees with the call."""
+        return request.model or self._model_name
+
     def convert_request(self, request: LLMRequest) -> Dict[str, Any]:
         return {
-            "model": self._model_name,
+            "model": self.effective_model(request),
             "messages": [self.convert_message(msg) for msg in request.messages],
             "max_tokens": request.max_tokens,
             "tools": [self.convert_tool(tool) for tool in request.tools],
@@ -238,11 +244,12 @@ class AIProvider(AbstractAIProvider):
             raise RuntimeError(f"{self.name} not configured (set {self._var_name})")
 
         try:
+            model = self.effective_model(request)
             raw_request = self.convert_request(request)
-            _log_raw("LLM_RAW_REQUEST", self._name, self._model_name, raw_request)
+            _log_raw("LLM_RAW_REQUEST", self._name, model, raw_request)
             raw_response = self._client.chat.completions.create(**raw_request)
-            _log_raw("LLM_RAW_RESPONSE", self._name, self._model_name, raw_response)
-            _log_chat_completion(self._name, self._model_name, raw_response)
+            _log_raw("LLM_RAW_RESPONSE", self._name, model, raw_response)
+            _log_chat_completion(self._name, model, raw_response)
             return self.convert_response(raw_response)
         except Exception as e:
             error = f"Exception while communicating with LLM: {e}"
