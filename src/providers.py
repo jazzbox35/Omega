@@ -199,7 +199,7 @@ class LLMRequest:
         return self.tool_by_name.get(name, None)
 
     def __repr__(self):
-        return f"LLMRequest[messages={self.messages!r}, max_tokens={self.max_tokens!r}, reasoning_mode={self.reasoning_mode!r}, tools={self.tools!r}, provider={self.provider}, model={self.model}, router={self.router}]"
+        return f"LLMRequest[messages={self.messages!r}, max_tokens={self.max_tokens!r}, reasoning_mode={self.reasoning_mode!r}, tools={self.tools!r}, provider={self.provider!r}, model={self.model!r}, router={self.router!r}]"
 
 class LLMResponse:
 

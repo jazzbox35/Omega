@@ -136,12 +136,12 @@ def test_openrouter_cache_control_follows_the_effective_model(plugins, monkeypat
 
 def test_repr_prints_the_routing_fields():
     """R3-T6 (A9, FR4): the REQUEST: log line shows provider, model and router,
-    and no metadata value."""
+    in the class's own name=repr(value) convention, and no metadata value."""
     request = (LLMRequest().with_provider("p").with_model("m").with_router("r")
                            .with_metadata({"note": "user text"}))
     printed = repr(request)
-    for field in ("provider=p", "model=m", "router=r"):
-        assert field in printed
+    for name, value in (("provider", "p"), ("model", "m"), ("router", "r")):
+        assert f"{name}={value!r}" in printed
     assert "user text" not in printed
 
 
