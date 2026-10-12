@@ -1,8 +1,23 @@
 # convert_request(_baseline_request()) of each real provider in
 # tests/test_providers_effective_model.py, generated on 030c01442598a30a3b6ba98d2833e48b99f9e0e9
-# (#358's head, the A1 baseline; spec O6.4) with no configuration set.
-# Generated with openai stubbed, not under tests/pytest.sh; regenerate
-# only if _baseline_request() changes. Read by R3-T2 (A1).
+# (#358's head, the A1 baseline; spec O6.4). Read by R3-T2 (A1).
+#
+# Request: _baseline_request() as defined in that test file: system
+#   'You are Omega. HISTORY: none yet', user 'hi', an assistant call
+#   send(content='hello') id call_1 and its tool reply 'sent';
+#   max_tokens 1000, reasoning_mode 'medium', one tool send(content).
+# Configuration: the test's plugins fixture and _ai_providers():
+#   config._CONFIG/_COMMAND_LINE/_CONFIG_FILE emptied (every key at its
+#   default), OMEGA_OPENAI_PROMPT_CACHE_KEY, OMEGA_OPENROUTER_SESSION_ID
+#   and OMEGA_OPENROUTER_CACHE_TTL unset, each *_API_KEY = 'dummy-key',
+#   models = CONFIGURED (openaiapi qwen3.5:9b, asione asi1-ultra, openrouter z-ai/glm-5.2, openai gpt-5.5).
+# Stubs while generating (system python3, NOT tests/pytest.sh):
+#   openai -> a module whose OpenAI = object (convert_request never
+#   constructs a client); pytest -> fixture/mark.parametrize no-ops and
+#   a monkeypatch with setitem/setattr/setenv/delenv; src.logger -> the
+#   test's own logging.getLogger stub. If a stub altered the dict, R3-T2
+#   goes red under the real packages, which is the correct outcome.
+# Regenerate only if _baseline_request() or CONFIGURED changes.
 {'asione': {'extra_body': {'enable_thinking': True, 'thinking_budget': 500},
             'max_tokens': 1000,
             'messages': [{'content': 'You are Omega. HISTORY: none yet', 'role': 'system'},
