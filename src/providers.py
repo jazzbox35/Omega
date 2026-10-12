@@ -288,9 +288,11 @@ def llmCatalogueRefusal(catalogue, value):
     Check a (provider, model) value against the catalogue. Return None when it
     is permitted, otherwise the refusal naming the value as received and the
     catalogue. A malformed value is refused the same way, never completed.
+    An empty model is compared as any other value: it is permitted only where
+    the catalogue holds it, for a provider with no model concept.
     """
     if (isinstance(value, (tuple, list)) and len(value) == 2
-            and all(isinstance(part, str) and part for part in value)
+            and all(isinstance(part, str) for part in value)
             and tuple(value) in catalogue):
         return None
     return f"llmCatalogueRefusal: {value!r} is not in the catalogue {catalogue!r}"

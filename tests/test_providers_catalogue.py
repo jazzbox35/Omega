@@ -67,6 +67,10 @@ def test_check_refuses_naming_the_value_and_the_catalogue(value):
     assert repr(CATALOGUE) in refusal
 
 
-def test_check_refuses_an_empty_model_even_if_the_catalogue_holds_one():
-    """An empty model is malformed, never "the configured one" (no silent fallback)."""
-    assert llmCatalogueRefusal([("Test", "")], ("Test", "")) is not None
+def test_check_compares_an_empty_model_as_a_value():
+    """Spec section 14a B4: "" is a model only for a provider with no model
+    concept (Test without model set). The check compares it as any value: in
+    the catalogue it passes, so a no-router Test run behaves as today;
+    otherwise it is refused like any other pair."""
+    assert llmCatalogueRefusal([("Test", "")], ("Test", "")) is None
+    assert llmCatalogueRefusal(CATALOGUE, ("Test", "")) is not None
