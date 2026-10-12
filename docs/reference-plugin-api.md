@@ -8,6 +8,7 @@ The `loadOmegaPlugin` function calls the Omega plugin API in order to
 implement new agent's features. The plugin API provides functions to:
 - add communication channel integrations
 - add LLM provider integrations
+- add LLM routers
 - add new skills or remove added skills
 - extend LLM prompt by adding new information or removing it
 - etc
@@ -172,6 +173,33 @@ the system first (see [README.md](/README.md#installation)):
 ```sh
 sh run.sh run.metta provider=Example
 ```
+
+## LLM router integration
+
+A router decides which model an LLM request goes to (`ADR-0001`). It is a MeTTa
+function of the request, the catalogue and the last outcome, returning a
+`(provider model)` pair; `$last_outcome` is `()` for now and may be ignored. A
+router holds no credential and makes no call. The agent fills only the
+request's empty fields from the pair, checks the result against the catalogue
+and refuses anything outside it before a provider is called.
+
+A MeTTa plugin registers a router by name with `registerLLMRouter`, the router
+counterpart of `registerLLMProvider`:
+
+```metta
+(= (example_router $request $catalogue $last_outcome) ("Anthropic" "claude-opus-4-8"))
+
+(= (loadOmegaPlugin)
+   (registerLLMRouter "example" example_router))
+```
+
+and is listed in [config/plugins.yaml](/config/plugins.yaml) with `loader:
+metta` and `location: "{REPO}/routers"`. The `router` configuration parameter
+selects it by name. With no `router` set the null router runs and the request
+is sent to the configured model; a `router` nobody registered stops the agent
+at startup, naming the registered routers. A router needs `premium_model`
+configured (see [config/config.yaml](/config/config.yaml)). See
+[routers/README.md](/routers/README.md).
 
 ## Other agent related APIs
 
