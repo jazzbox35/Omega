@@ -23,6 +23,12 @@ def plugins(monkeypatch):
     logger_mod = types.ModuleType("src.logger")
     logger_mod.get_logger = lambda name: __import__("logging").getLogger(name)
     monkeypatch.setitem(sys.modules, "src.logger", logger_mod)
+    # tests/pytest.sh runs on the CI host, where requirements.txt is not installed;
+    # with providers/ on sys.path, `import openai` would load providers/openai.py.
+    # No test here constructs a client, so a stand-in package is enough.
+    openai_mod = types.ModuleType("openai")
+    openai_mod.OpenAI = object
+    monkeypatch.setitem(sys.modules, "openai", openai_mod)
     monkeypatch.setattr(sys, "path", sys.path + [str(PROVIDERS)])
 
     def load(name):
