@@ -195,3 +195,54 @@ def test_envelope_provider_selects_nothing(monkeypatch):
     providers.llmProviderStart("A")
     providers.llmProviderChat(LLMRequest().with_provider("B"))
     assert called == ["A"]
+
+
+# LLMProvider.model() (spec section 14a B4): the model a provider calls when the
+# request names none, asked once after llmProviderStart to build the catalogue.
+
+def _wrappers(load):
+    """The registered provider objects, as their plugins construct them."""
+    openaiapi = load("openaiapi")
+    return {
+        "OpenAI": (load("openai").OpenAIProvider(), "openai_model", "gpt-5.5"),
+        "OpenRouter": (load("openrouter").OpenRouterProvider(), "openrouter_model", "z-ai/glm-5.2"),
+        "ASIOne": (load("asione").ASIOneProvider(), "asione_model", "asi1-ultra"),
+        "OpenAIAPI": (openaiapi.OpenAIAPI("OpenAIAPI"), "openaiapi_model", "qwen3.5:9b"),
+        "Anthropic": (openaiapi.OpenAIAPIPreconfigured("Anthropic", "ANTHROPIC_API_KEY", "claude-opus-4-8",
+                                                       "https://api.anthropic.com/v1/"), None, "claude-opus-4-8"),
+    }
+
+
+@pytest.mark.parametrize("name", ["OpenAI", "OpenRouter", "ASIOne", "OpenAIAPI", "Anthropic"])
+def test_provider_reports_its_plugin_default_model(plugins, name):
+    provider, _, default = _wrappers(plugins)[name]
+    provider.start()
+    assert provider.model() == default
+
+
+@pytest.mark.parametrize("name", ["OpenAI", "OpenRouter", "ASIOne", "OpenAIAPI"])
+def test_provider_reports_its_own_model_key(plugins, monkeypatch, name):
+    """Its own *_model key, never another provider's (R5-T1's concern at the source)."""
+    wrappers = _wrappers(plugins)
+    provider, key, _ = wrappers[name]
+    others = {other: "other-1" for _, other, _ in wrappers.values() if other and other != key}
+    monkeypatch.setattr(config, "_CONFIG_FILE", {key: "own-1", **others})
+    provider.start()
+    assert provider.model() == "own-1"
+
+
+@pytest.mark.parametrize("name", ["OpenAI", "OpenRouter", "ASIOne", "OpenAIAPI", "Anthropic"])
+def test_model_key_overrides_the_provider_model(plugins, monkeypatch, name):
+    provider, key, _ = _wrappers(plugins)[name]
+    monkeypatch.setattr(config, "_CONFIG_FILE", {"model": "econ-1", **({key: "own-1"} if key else {})})
+    provider.start()
+    assert provider.model() == "econ-1"
+
+
+def test_test_provider_reports_the_model_key_or_nothing(plugins, monkeypatch):
+    """The Test mock has no model concept: model() is the model key, else ""."""
+    mock = plugins("mockprovider").MockProvider()
+    assert mock.model() == ""
+    monkeypatch.setattr(config, "_CONFIG", {})
+    monkeypatch.setattr(config, "_CONFIG_FILE", {"model": "econ-1"})
+    assert mock.model() == "econ-1"
