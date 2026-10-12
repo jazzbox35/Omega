@@ -80,16 +80,34 @@ def test_stop_closes_the_client_once(plugins, monkeypatch):
         assert provider._client is None, name
 
 
-def test_no_provider_reaches_into_another_objects_client():
-    """R1-T3: outside lib_llm_ext.py, no code reads `_client` on an object other
-    than `self` (the private reach PR #373 added in OpenRouterProvider.stop).
-    A subclass using its own lazy client (OpenAIProviderImpl.chat) is allowed."""
+def _client_reaches(providers):
+    """Locations outside lib_llm_ext.py that read `_client` on an object other
+    than `self`: an attribute read, or getattr(<x>, "_client")."""
     reaches = []
-    for path in sorted(PROVIDERS.glob("*.py")):
+    for path in sorted(providers.glob("*.py")):
         if path.name == "lib_llm_ext.py":
             continue
         for node in ast.walk(ast.parse(path.read_text(), str(path))):
-            if isinstance(node, ast.Attribute) and node.attr == "_client" \
-                    and not (isinstance(node.value, ast.Name) and node.value.id == "self"):
+            if isinstance(node, ast.Attribute) and node.attr == "_client":
+                receiver = node.value
+            elif isinstance(node, ast.Call) and getattr(node.func, "id", None) == "getattr" and len(node.args) >= 2 \
+                    and isinstance(node.args[1], ast.Constant) and node.args[1].value == "_client":
+                receiver = node.args[0]
+            else:
+                continue
+            if not (isinstance(receiver, ast.Name) and receiver.id == "self"):
                 reaches.append(f"{path.name}:{node.lineno}")
-    assert reaches == []
+    return reaches
+
+
+def test_no_provider_reaches_into_another_objects_client(tmp_path):
+    """R1-T3 (QA addendum 1): outside lib_llm_ext.py, no code reads `_client` on
+    an object other than `self` (the private reach PR #373 added in
+    OpenRouterProvider.stop). A subclass may use its own `self._client`
+    (OpenAIProviderImpl.chat). Aliasing is not followed (`c = self; c.delegate`)."""
+    fixtures = REPO / "tests" / "res" / "architecture"
+    assert _client_reaches(PROVIDERS) == []
+    assert _client_reaches(fixtures / "providers@030c0144") == []
+    assert _client_reaches(fixtures / "providers@193e9f58") == ["openrouter.py:29"]
+    (tmp_path / "fixture.py").write_text('def stop(delegate):\n    return getattr(delegate, "_client")\n')
+    assert _client_reaches(tmp_path) == ["fixture.py:2"]
