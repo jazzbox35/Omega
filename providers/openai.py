@@ -15,9 +15,12 @@ class OpenAIProvider(LLMProvider):
 
     def start(self) -> None:
         openai_model = config_get_by_key("openai_model", "gpt-5.5")
-        model = config_get_by_key("model", openai_model)
+        self._model = config_get_by_key("model", openai_model)
         self.delegate = OpenAIProviderImpl("OpenAI", "OPENAI_API_KEY",
-                                           model, "https://api.openai.com/v1")
+                                           self._model, "https://api.openai.com/v1")
+
+    def model(self) -> str:
+        return self._model
 
     def stop(self) -> None:
         self.delegate.stop()

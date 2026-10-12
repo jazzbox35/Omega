@@ -29,9 +29,12 @@ class ASIOneProvider(providers.LLMProvider):
 
     def start(self) -> None:
         asione_model = config_get_by_key("asione_model", "asi1-ultra")
-        model = config_get_by_key("model", asione_model)
+        self._model = config_get_by_key("model", asione_model)
         self.delegate = ASIOneProviderImpl("ASIOne", "ASIONE_API_KEY",
-                                           model, "https://api.asi1.ai/v1")
+                                           self._model, "https://api.asi1.ai/v1")
+
+    def model(self) -> str:
+        return self._model
 
     def stop(self) -> None:
         self.delegate.stop()

@@ -232,6 +232,11 @@ class LLMProvider:
         """Stop and LLM provider and free resources"""
         pass
 
+    def model(self) -> str:
+        """The model the provider calls when the request names none; asked
+        after start(). "" for a provider with no model concept."""
+        return config.config_get_by_key("model") or ""
+
     def chat(self, request: LLMRequest) -> LLMResponse:
         """Chat with LLM provider"""
         raise NotImplementedError()
