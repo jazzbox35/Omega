@@ -4,7 +4,7 @@
    (py-call (providers.llmProviderStart $provider)))
 
 (= (llmProviderChat $request)
-     (py-call (providers.llmProviderChat $request "none")))
+     (py-call (providers.llmProviderChat $request)))
 
 (= (llmProviderChat $request $router)
    (case $router (
@@ -15,9 +15,11 @@
          ($tier (default_router $prompt_contents_normalized))
          ($_ (log INFO "providers" $tier))
         )
-        (py-call (providers.llmProviderChat $request $tier)))
+        ; Logged, not applied: the envelope carries no tier (R3); the hook
+        ; that applies a router's decision is R6's.
+        (py-call (providers.llmProviderChat $request)))
     )
-    ($_otherwise (py-call (providers.llmProviderChat $request "none")))
+    ($_otherwise (py-call (providers.llmProviderChat $request)))
    )))
 
 (= (llmRequestMessage role $role content $content)

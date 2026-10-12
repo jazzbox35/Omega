@@ -1,7 +1,5 @@
 import config
 import logging
-import inspect
-from pprint import pformat
 from typing import List
 
 logger = logging.getLogger(__name__)
@@ -140,7 +138,6 @@ class LLMRequest:
         self.messages: [LLMMessage] = []
         self.max_tokens = config.config_get_by_key("maxOutputToken")
         self.reasoning_mode = config.config_get_by_key("reasoningMode")
-        self.tier = None
         self.tools = []
         self.tool_by_name = {}
         # The routing envelope (ADR-0001): empty means not named. A provider
@@ -274,11 +271,10 @@ def llmRequestContentsNormalized(request):
     return " ".join(contents).translate(str.maketrans({char: " " for char in "[](),.:"})).lower()
 
 
-def llmProviderChat(request, tier=None):
-    """Chat with optional tier metadata; MeTTa's "none" sentinel means no tier."""
+def llmProviderChat(request):
+    """Chat via selected LLM provider"""
     global _llmprovider
     try:
-        request.tier = None if tier == "none" else tier
         response = _llmprovider.chat(request)
         return _validate_response(request, response)
     except Exception:
