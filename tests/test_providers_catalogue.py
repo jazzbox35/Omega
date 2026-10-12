@@ -126,18 +126,26 @@ def test_startup_builds_and_logs_the_catalogue_once(start, caplog):
     assert repr(providers._catalogue) in lines[0]
 
 
+@pytest.mark.parametrize("router", [None, ""])
+def test_startup_without_a_router_needs_no_premium_model(start, router):
+    """Off (unset, or loop.metta's default "") starts with one entry."""
+    start(**({"model": "econ-1"} if router is None else {"model": "econ-1", "router": router}))
+    assert providers._catalogue == [("Fake", "econ-1")]
+
+
 class _Symbol:
     """Stands in for a value configure may hand over as other than a str."""
     def __str__(self):
         return "no_router"
 
 
-@pytest.mark.parametrize("router", [None, "no_router", _Symbol()])
-def test_startup_without_a_router_needs_no_premium_model(start, router):
-    """Off (unset, or loop.metta's no_router until R6) starts with one entry.
-    Read through str(), the repo's idiom for configured values (rag.py)."""
-    start(**({"model": "econ-1"} if router is None else {"model": "econ-1", "router": router}))
-    assert providers._catalogue == [("Fake", "econ-1")]
+@pytest.mark.parametrize("router", ["no_router", _Symbol()])
+def test_no_router_is_a_name_like_any_other(start, router):
+    """Spec 14a B6: the interim no_router special case is gone at R6; read
+    through str(), it is a configured router and needs premium_model."""
+    with pytest.raises(RuntimeError) as error:
+        start(model="econ-1", router=router)
+    assert "premium_model" in str(error.value)
 
 
 def test_startup_of_a_provider_with_no_model_holds_the_empty_model(start):
