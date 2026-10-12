@@ -1,0 +1,5 @@
+# The default router's test configuration (tests/router_default.metta, R7-T1):
+# the test's own keywords and threshold, not the documented defaults.
+premium_model: prem-1
+router_escalate_keywords: "zzkeyword,error"
+router_escalate_items: 4
