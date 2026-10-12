@@ -81,8 +81,9 @@ class OpenAIProviderImpl(llm.AIProvider):
             "input": input,
             "max_output_tokens": request.max_tokens,
             "reasoning": { "effort": request.reasoning_mode },
-            "prompt_cache_key": config_get_by_key("OPENAI_PROMPT_CACHE_KEY",
-                                                  default_cache_key),
+            # No default here: config_get_by_key caches it, which would pin the
+            # first request's key for the life of the process.
+            "prompt_cache_key": config_get_by_key("OPENAI_PROMPT_CACHE_KEY") or default_cache_key,
             "tools": [self.convert_tool(tool) for tool in request.tools],
             "tool_choice": "required",
         }
