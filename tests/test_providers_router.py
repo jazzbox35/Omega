@@ -213,7 +213,7 @@ def test_the_next_request_after_a_refusal_is_answered(running):
 def test_test_with_no_model_key_is_answered_through_the_hook(clean, monkeypatch):
     """QA 4d88a559 (b), at R6's head: the mock Test, no model key, no router.
     The null router's ("Test", "") is in the catalogue {(Test, "")}, so the
-    request reaches the provider and is answered, as at 030c0144."""
+    request reaches the provider and is answered, as at c193ab3."""
     logger_mod = types.ModuleType("src.logger")
     logger_mod.get_logger = lambda name: logging.getLogger(name)
     monkeypatch.setitem(sys.modules, "src.logger", logger_mod)
