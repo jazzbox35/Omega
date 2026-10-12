@@ -43,3 +43,15 @@ def test_llm_tool_call_to_sexpr_escape():
             .add_argument('bar', 'test"\\'))
     call.set_tool(tool)
     assert llmToolCallToSExpr(call) == '(call#0 (foo "test\\"\\\\"))'
+
+
+def test_request_contents_normalized():
+    """R7-T2 (spec section 9): role prefixes role_user / role_tool, [](),.: to
+    spaces, lowercased, assistant messages excluded. The literal is worked out
+    by hand from those rules, not by running the function."""
+    request = LLMRequest().with_messages([
+        llmRequestMessage("user", "Hello, World: (x)"),
+        llmToolCallResponseMessage("tool", "c1", "[Error]."),
+        llmRequestMessage("assistant", "skip"),
+    ])
+    assert llmRequestContentsNormalized(request) == "role_user hello  world   x  role_tool  error  "
