@@ -3,10 +3,11 @@
 ;----------------;
 ;
 ; The simple default router looks for single terms in tool results and user messages and
-; returns either "economy" tier model or "premium" tier model. It also checks other criteria
-; as defined herein.
-; If a complexity condition is found, the premium model tier is returned, else the economy model. 
-; The default_router can be refined to look for a variety of conditions and keywords.
+; returns one catalogue entry (ADR-0001): the configured model, or premium_model on the
+; same provider. It also checks other criteria as defined herein.
+; If a complexity condition is found, premium_model is returned, else the configured model.
+; The keywords (router_escalate_keywords) and the item count (router_escalate_items) are
+; configuration; see config/config.yaml.
 
 ; Create term atoms for fast access. Note a sequence number is attached for reference.
 (= (create_temp_atoms $prompt_list $seq_number)
@@ -27,27 +28,27 @@
                            $atom
                            (empty))))
 
+; &temp is one global space, and delete_temp_atoms removes every prompt_atom in it:
+; harmless while one decision runs at a time, wrong once two can overlap (a retry
+; loop, an out-of-process router).
 (= (delete_temp_atoms)
    (collapse (match &temp (prompt_atom $x $seq) (remove-atom &temp (prompt_atom $x $seq)))))
 
 ; Look for a variety of common situations signalling the need for a premium model call.
-; Return either an economy model or premium model tier.
-; Note:  The $prompt variable represents a subset of the prompt -- the tool call results and
-;     user messages.
-(= (default_router $prompt)
+; Return the configured model's catalogue entry, or premium_model on the same provider.
+; Note:  The prompt is a subset of the request -- the tool call results and user
+;     messages, normalised.
+(= (default_router $request $catalogue $last_outcome)
+   (default_router_text (llmRequestContentsNormalized $request) $catalogue))
+
+(= (default_router_text $prompt $catalogue)
    (let* (
          ; create a list of terms, type string, using native Prolog from the single prompt string.
          ($prompt_list (split_string $prompt " " " "))
          ($_ (create_temp_atoms $prompt_list 0))
          ; look for simple terms hinting at complexity
-         ($found_complexity_term 
-               (collapse (lookup_term 
-                    (superpose 
-                         ; INSERT TERMS TO LIST TO FLAG COMPLEXITY, USER LOWERCASE TYPE STRING
-                         ("alert_failed" "premium" "error")))))
-
-         ; Create list to check for more than one user message
-         ($number_of_user_msgs (collapse (match &temp (prompt_atom "role_user" $seq) $seq)))
+         ($found_complexity_term
+               (collapse (lookup_term (superpose (get-state &defaultRouterKeywords)))))
          ; Create list to count the total number of tool results and user messages 
          ($number_of_issues (collapse (match &temp (prompt_atom $atom $seq) 
                               (if (or (== $atom "role_user") (== $atom "role_tool")) 
@@ -55,9 +56,19 @@
                                     (empty))))) 
          ; cleanup
          ($_ (delete_temp_atoms))
+         ($economy (car-atom $catalogue))
+         ($provider (car-atom $economy))
          )
-         (if (and 
-               (and (== $found_complexity_term ()) (< (size-atom $number_of_user_msgs) 2 ))
-                    (< (size-atom $number_of_issues) 9))
-                           economy_model
-                           premium_model)))
+         (if (and (== $found_complexity_term ())
+                  (< (size-atom $number_of_issues) (router_escalate_items)))
+                           $economy
+                           ($provider (premium_model)))))
+
+; The keywords are normalised once, with the text's own function, and logged by it.
+(= (loadOmegaPlugin)
+   (progn
+     (configure premium_model "")
+     (configure router_escalate_items 9)
+     (change-state! &defaultRouterKeywords
+       (llmKeywordsNormalized (configGetByKey router_escalate_keywords "alert_failed,error,premium_model")))
+     (registerLLMRouter "default" default_router)))

@@ -15,6 +15,11 @@ sleepInterval: 1
 # Unset: the null router, requests go to the configured model. A name no plugin
 # registered stops the agent at startup
 #router: 
+# Default router (router: default): premium_model when one of these comma-separated
+# keywords occurs as a whole word in the request's user or tool messages, or at this
+# many user-plus-tool messages in the request; otherwise the configured model
+#router_escalate_keywords: "alert_failed,error,premium_model"
+#router_escalate_items: 9
 # LLM provider id, see the list below in the Providers section
 provider: Anthropic
 # Output cap passed to the provider
