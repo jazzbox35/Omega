@@ -254,16 +254,24 @@ def registerLLMProvider(id: str, provider: LLMProvider) -> None:
     _llmProviderRegistry[id] = provider
 
 _llmprovider: LLMProvider = None
+_catalogue = None
 
 def llmProviderStart(provider):
-    """Select and start one of the LLM providers registered by plugins"""
-    global _llmprovider
+    """Select and start one of the LLM providers registered by plugins, then
+    enumerate the catalogue from its configured model"""
+    global _llmprovider, _catalogue
     _llmprovider = _llmProviderRegistry.get(provider, None)
     if _llmprovider is None:
         error = f"llmProviderStart: LLM provider plugin {provider} is not registered"
         logger.error(error)
         raise RuntimeError(error)
     _llmprovider.start()
+    # no_router is loop.metta's "routing off" until the null router (R6).
+    router = config.config_get_by_key("router") or ""
+    _catalogue = llmCatalogue(provider, _llmprovider.model(),
+                              config.config_get_by_key("premium_model") or "",
+                              "" if router == "no_router" else router)
+    logger.info(f"llmProviderStart: catalogue {_catalogue!r}")
 
 def llmCatalogue(provider, model, premium_model, router):
     """
