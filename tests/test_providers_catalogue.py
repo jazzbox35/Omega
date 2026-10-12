@@ -5,7 +5,11 @@ In increment 1 the catalogue is the running provider's configured model plus
 premium_model, both on the running provider (spec section 4, invariant 3; O4).
 A value outside it is refused before any provider is called (A5).
 """
+import importlib.util
 import logging
+import pathlib
+import sys
+import types
 
 import pytest
 
@@ -148,3 +152,47 @@ def test_startup_with_a_router_and_no_premium_model_fails(start):
         start(model="econ-1", router="default")
     assert "premium_model" in str(error.value)
     assert providers._catalogue is None
+
+
+# QA's R5-T1 cases from B4 (QA 4d88a559): the real plugins, no model key.
+
+PROVIDERS = pathlib.Path(__file__).resolve().parent.parent / "providers"
+
+
+@pytest.fixture
+def plugin(start, monkeypatch):
+    """Load a provider plugin as src/plugin.py:loadPythonPlugin does and call
+    its loadOmegaPlugin, with no configuration key set."""
+    logger_mod = types.ModuleType("src.logger")
+    logger_mod.get_logger = lambda name: logging.getLogger(name)
+    monkeypatch.setitem(sys.modules, "src.logger", logger_mod)
+    monkeypatch.setattr(sys, "path", sys.path + [str(PROVIDERS)])
+    monkeypatch.setattr(config, "_CONFIG", {})
+    monkeypatch.setattr(config, "_CONFIG_FILE", {})
+    monkeypatch.setattr(providers, "_llmProviderRegistry", {})
+
+    def load(name):
+        spec = importlib.util.spec_from_file_location(f"omega_plugin_{name}", PROVIDERS / f"{name}.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.loadOmegaPlugin()
+        return providers._llmProviderRegistry
+    return load
+
+
+def test_startup_on_a_plugin_default_holds_that_default(plugin, monkeypatch):
+    """R5-T1 (a), B4: no model key, no router; the catalogue holds the model
+    the plugin resolves as its default (openaiapi.py's anthropic_model), never ""."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "dummy")
+    registry = plugin("openaiapi")
+    default = registry["Anthropic"]._default_model   # what loadOmegaPlugin resolved
+    providers.llmProviderStart("Anthropic")
+    assert default != ""
+    assert providers._catalogue == [("Anthropic", default)]
+
+
+def test_startup_of_test_with_no_model_key_is_the_empty_model(plugin):
+    """R5-T1 (b), B4: Test (the mock), no model key, no router -> {(Test, "")}."""
+    plugin("mockprovider")
+    providers.llmProviderStart("Test")
+    assert providers._catalogue == [("Test", "")]
