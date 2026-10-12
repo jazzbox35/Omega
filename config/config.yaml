@@ -8,6 +8,9 @@ maxWakeLoops: 1
 sleepInterval: 1
 # LLM model to load overrides *_model parameters see below
 #model: 
+# Second model on the same provider; with model it makes the catalogue, the
+# allow-list a router may choose from (ADR-0001). Required when a router is configured
+#premium_model: 
 # LLM provider id, see the list below in the Providers section
 provider: Anthropic
 # Output cap passed to the provider

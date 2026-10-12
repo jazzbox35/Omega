@@ -153,6 +153,13 @@ def loadOmegaPlugin():
 
 Here `"Example"` is an identifier of the LLM provider.
 
+A provider that calls a model should also implement `model() -> str`, returning
+the model it calls when a request names none. The agent asks it once after
+`start()` and enumerates the catalogue from it: the allow-list of
+`(provider, model)` pairs a request may name (`ADR-0001`). The default returns
+the `model` configuration parameter, or `""` for a provider with no model
+concept.
+
 ### Using LLM provider
 
 The LLM provider identifier should be used as the value for the `provider`
