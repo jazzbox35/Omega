@@ -267,7 +267,7 @@ def llmProviderStart(provider):
         raise RuntimeError(error)
     _llmprovider.start()
     # no_router is loop.metta's "routing off" until the null router (R6).
-    router = config.config_get_by_key("router") or ""
+    router = str(config.config_get_by_key("router") or "")
     _catalogue = llmCatalogue(provider, _llmprovider.model(),
                               config.config_get_by_key("premium_model") or "",
                               "" if router == "no_router" else router)
