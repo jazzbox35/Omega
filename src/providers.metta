@@ -33,6 +33,14 @@
        (((Error $call $message) (py-call (providers.llmRouterRaised $router (swrite $answer))))
         ($value (py-call (providers.llmProviderChatRouted $request $router $value)))))))
 
+; For routers, which make no py-call (R2 check 1): the request's text and the
+; configured keywords, normalised by the same function.
+(= (llmRequestContentsNormalized $request)
+   (py-call (providers.llmRequestContentsNormalized $request)))
+
+(= (llmKeywordsNormalized $keywords)
+   (py-call (providers.llmKeywordsNormalized $keywords)))
+
 (= (llmRequestMessage role $role content $content)
    (py-call (providers.llmRequestMessage $role $content)))
 

@@ -381,6 +381,23 @@ def llmRequestContentsNormalized(request):
     ]
     return " ".join(contents).translate(str.maketrans({char: " " for char in "[](),.:"})).lower()
 
+def llmKeywordsNormalized(keywords):
+    """
+    Normalise comma-separated keywords with the request text's own function,
+    so that each can match the normalised text as a whole word (O7). A keyword
+    that normalises to no word, or to more than one, is a startup error naming it.
+    """
+    normalized = []
+    for keyword in str(keywords).split(","):
+        words = llmRequestContentsNormalized(LLMRequest().with_messages([llmRequestMessage("user", keyword)])).split()[1:]
+        if len(words) != 1:
+            error = f"llmKeywordsNormalized: keyword {keyword!r} does not normalise to one word"
+            logger.error(error)
+            raise RuntimeError(error)
+        normalized.append(words[0])
+    logger.info(f"llmKeywordsNormalized: {normalized!r}")
+    return normalized
+
 
 def llmProviderChat(request):
     """Chat via selected LLM provider"""
