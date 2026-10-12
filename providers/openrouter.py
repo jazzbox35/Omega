@@ -26,7 +26,7 @@ class OpenRouterProvider(providers.LLMProvider):
 
     def stop(self) -> None:
         for delegate in (self.delegate, self.premium_delegate):
-            if delegate is not None and delegate._client is not None:
+            if delegate is not None:
                 delegate.stop()
 
     def chat(self, args: providers.LLMRequest) -> providers.LLMResponse:
