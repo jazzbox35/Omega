@@ -5,6 +5,7 @@ from typing import List
 logger = logging.getLogger(__name__)
 
 _llmProviderRegistry = {}
+_llmRouterRegistry = []
 
 class LLMTool:
 
@@ -254,23 +255,23 @@ def registerLLMProvider(id: str, provider: LLMProvider) -> None:
     _llmProviderRegistry[id] = provider
 
 _llmprovider: LLMProvider = None
+_provider = None
 _catalogue = None
 
 def llmProviderStart(provider):
     """Select and start one of the LLM providers registered by plugins, then
     enumerate the catalogue from its configured model"""
-    global _llmprovider, _catalogue
+    global _llmprovider, _provider, _catalogue
     _llmprovider = _llmProviderRegistry.get(provider, None)
     if _llmprovider is None:
         error = f"llmProviderStart: LLM provider plugin {provider} is not registered"
         logger.error(error)
         raise RuntimeError(error)
     _llmprovider.start()
-    # no_router is loop.metta's "routing off" until the null router (R6).
-    router = str(config.config_get_by_key("router") or "")
+    _provider = provider
     _catalogue = llmCatalogue(provider, _llmprovider.model(),
                               config.config_get_by_key("premium_model") or "",
-                              "" if router == "no_router" else router)
+                              str(config.config_get_by_key("router") or ""))
     logger.info(f"llmProviderStart: catalogue {_catalogue!r}")
 
 def llmCatalogue(provider, model, premium_model, router):
@@ -309,6 +310,66 @@ def llmCatalogueRefusal(catalogue, value):
             and tuple(value) in catalogue):
         return None
     return f"llmCatalogueRefusal: {value!r} is not in the catalogue {catalogue!r}"
+
+def registerLLMRouter(id) -> str:
+    """
+    Register a router's name (ADR-0001). The router itself is a MeTTa
+    function, registered next to the name by src/providers.metta; the null
+    router is registered under the empty name, which no configuration names.
+
+    Arguments:
+    id: the name configuration selects the router by
+    """
+    global _llmRouterRegistry
+    id = str(id or "")
+    if id:
+        logger.info(f"registerLLMRouter: registering router {id}")
+        _llmRouterRegistry.append(id)
+    return id
+
+def llmRouterStart(router) -> str:
+    """Resolve the configured router name at startup: "" (none configured)
+    is the null router; a name nobody registered halts startup."""
+    router = str(router or "")
+    if router and router not in _llmRouterRegistry:
+        error = f"llmRouterStart: router {router} is not registered, registered routers: {_llmRouterRegistry!r}"
+        logger.error(error)
+        raise RuntimeError(error)
+    logger.info(f"llmRouterStart: router {router or 'null'}")
+    return router
+
+def llmCatalogueGet():
+    """The catalogue as plain data, as the hook hands it to a router"""
+    return [list(entry) for entry in _catalogue]
+
+def llmNullRouter(request):
+    """The router that runs when none is configured: the running provider and
+    its configured model, in the envelope's empty fields only."""
+    return [request.provider or _provider, request.model or _llmprovider.model()]
+
+def llmProviderChatRouted(request, router, answer):
+    """
+    The hook, after the router (ADR-0001): the router's (provider, model)
+    answer fills only the envelope's empty fields, the catalogue checks the
+    result, and only a permitted envelope reaches the provider. A refusal
+    names the router, the value and the catalogue, and returns an empty
+    response, as a failed LLM call.
+    """
+    value = answer
+    if isinstance(answer, (tuple, list)) and len(answer) == 2:
+        value = (request.provider or answer[0], request.model or answer[1])
+    refusal = llmCatalogueRefusal(_catalogue, value)
+    if refusal is not None:
+        logger.error(f"llmProviderChat: router {router or 'null'}: {refusal}")
+        return LLMResponse()
+    request.provider, request.model = value
+    return llmProviderChat(request)
+
+def llmRouterRaised(router, error):
+    """The hook when the router raised: refused like a value outside the
+    catalogue, never a fallback to the null router."""
+    logger.error(f"llmProviderChat: router {router or 'null'} raised {error}, nothing sent, catalogue {_catalogue!r}")
+    return LLMResponse()
 
 def llmRequestContentsNormalized(request):
     """Prefix contents with role_user/role_tool, join, replace [](),.: with spaces, and lowercase."""

@@ -51,6 +51,13 @@ def test_routers_register_by_name(clean, caplog):
     assert any("registerLLMRouter" in line and "a" in line for line in _lines(caplog))
 
 
+def test_the_null_router_registers_under_the_empty_name_unlisted(clean):
+    """src/providers.metta registers the null router under "", the name no
+    configuration gives; it is not one of the routers a halt lists."""
+    assert registerLLMRouter("") == ""
+    assert providers._llmRouterRegistry == []
+
+
 @pytest.mark.parametrize("router", [None, ""])
 def test_start_without_a_router_runs_the_null_router(clean, caplog, router):
     """R6-FR2, FR5: no router configured starts normally; the log names null."""

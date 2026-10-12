@@ -1,26 +1,37 @@
-!(import! &self (library Omega ./routers/default))
+; Routers (ADR-0001). A router is a MeTTa function
+;   (router $request $catalogue $last_outcome) -> (provider model)
+; registered by name from its plugin's loadOmegaPlugin, through
+; config/plugins.yaml. $last_outcome is () until increment 4. The name goes
+; through Python both when registered and when looked up, so the two compare.
+
+(: registerLLMRouter (-> Atom Atom Expression))
+(= (registerLLMRouter $name $function)
+   (let $id (py-call (providers.registerLLMRouter $name))
+     (progn
+       (add-atom &self (llmRouter $id $function))
+       ())))
+
+; Routing off is a configuration: the null router, under the empty name.
+(= (llmNullRouter $request $catalogue $last_outcome)
+   (py-call (providers.llmNullRouter $request)))
+
+!(registerLLMRouter "" llmNullRouter)
+
+; Resolve the configured router once; an unregistered name raises and halts.
+(= (llmRouterStart $router)
+   (let $id (py-call (providers.llmRouterStart $router))
+     (change-state! &llmRouter (match &self (llmRouter $id $function) $function))))
 
 (= (llmProviderStart $provider)
    (py-call (providers.llmProviderStart $provider)))
 
-(= (llmProviderChat $request)
-     (py-call (providers.llmProviderChat $request)))
-
+; The hook: every request goes through the router, then the catalogue.
 (= (llmProviderChat $request $router)
-   (case $router (
-    (default 
-      (let* 
-        (
-         ($prompt_contents_normalized (py-call (providers.llmRequestContentsNormalized $request)))
-         ($tier (default_router $prompt_contents_normalized))
-         ($_ (log INFO "providers" $tier))
-        )
-        ; Logged, not applied: the envelope carries no tier (R3); the hook
-        ; that applies a router's decision is R6's.
-        (py-call (providers.llmProviderChat $request)))
-    )
-    ($_otherwise (py-call (providers.llmProviderChat $request)))
-   )))
+   (let $answer (catch (let $function (get-state &llmRouter)
+                         ($function $request (py-call (providers.llmCatalogueGet)) ())))
+     (case $answer
+       (((Error $call $message) (py-call (providers.llmRouterRaised $router (swrite $answer))))
+        ($value (py-call (providers.llmProviderChatRouted $request $router $value)))))))
 
 (= (llmRequestMessage role $role content $content)
    (py-call (providers.llmRequestMessage $role $content)))

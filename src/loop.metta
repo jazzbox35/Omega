@@ -18,7 +18,7 @@
           (configure wakeupInterval 600) ;600=10 minutes
           (configure memoryDirectory
                (joinPath ((py-call (helper.projectRootDirectory)) memory)))
-          (configure router no_router)
+          (configure router "")
           (change-state! &prevmsg "")
           (change-state! &loops (maxNewInputLoops))
           (messagesClear)
@@ -87,7 +87,8 @@
                                (initChannels)
                                (addTelegramPromptExtension)
                                (commChannelSend (version))
-                               (llmProviderStart (provider)))
+                               (llmProviderStart (provider))
+                               (llmRouterStart (router)))
                         (change-state! &loops (- (get-state &loops) 1)))
           (let $prompt (getContext)
                (progn (log INFO "loop" (---------iteration $k))
