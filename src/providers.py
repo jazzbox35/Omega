@@ -260,6 +260,41 @@ def llmProviderStart(provider):
         raise RuntimeError(error)
     _llmprovider.start()
 
+def llmCatalogue(provider, model, premium_model, router):
+    """
+    The catalogue (ADR-0001): the allow-list of (provider, model) pairs a
+    request may name. In increment 1 it is the running provider's configured
+    model plus premium_model, both on the running provider.
+
+    Arguments:
+    provider: the running provider's id
+    model: its configured model
+    premium_model: the configured premium model, "" when unset
+    router: the configured router name, "" when none is configured
+
+    A router configured without premium_model is a startup error naming the key.
+    """
+    if router and not premium_model:
+        error = f"llmCatalogue: router {router} is configured but premium_model is not set"
+        logger.error(error)
+        raise RuntimeError(error)
+    catalogue = [(provider, model)]
+    if premium_model and premium_model != model:
+        catalogue.append((provider, premium_model))
+    return catalogue
+
+def llmCatalogueRefusal(catalogue, value):
+    """
+    Check a (provider, model) value against the catalogue. Return None when it
+    is permitted, otherwise the refusal naming the value as received and the
+    catalogue. A malformed value is refused the same way, never completed.
+    """
+    if (isinstance(value, (tuple, list)) and len(value) == 2
+            and all(isinstance(part, str) and part for part in value)
+            and tuple(value) in catalogue):
+        return None
+    return f"llmCatalogueRefusal: {value!r} is not in the catalogue {catalogue!r}"
+
 def llmRequestContentsNormalized(request):
     """Prefix contents with role_user/role_tool, join, replace [](),.: with spaces, and lowercase."""
     contents = [
