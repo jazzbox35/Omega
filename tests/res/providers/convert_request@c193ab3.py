@@ -1,6 +1,7 @@
 # convert_request(_baseline_request()) of each real provider in
-# tests/test_providers_effective_model.py, generated on 030c01442598a30a3b6ba98d2833e48b99f9e0e9
-# (#358's head, the A1 baseline; spec O6.4). Read by R3-T2 (A1).
+# tests/test_providers_effective_model.py, generated on c193ab39857944017e067b426779d66113649313
+# (#358 as #373 merged it, tree == 77a118c: the A1 baseline; spec B17,
+#   amending O6.4). Read by R3-T2 (A1).
 #
 # Request: _baseline_request() as defined in that test file: system
 #   'You are Omega. HISTORY: none yet', user 'hi', an assistant call

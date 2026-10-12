@@ -22,8 +22,8 @@ from providers import *
 REPO = pathlib.Path(__file__).resolve().parent.parent
 PROVIDERS = REPO / "providers"
 # convert_request output of each provider for _baseline_request(), generated on
-# 030c0144 (#358's head, the A1 baseline); the file names how.
-SNAPSHOT = REPO / "tests" / "res" / "providers" / "convert_request@030c0144.py"
+# c193ab3 (#358 as #373 merged it: the A1 baseline, spec B17); the file names how.
+SNAPSHOT = REPO / "tests" / "res" / "providers" / "convert_request@c193ab3.py"
 
 CONFIGURED = {
     "openaiapi": "qwen3.5:9b",
@@ -69,7 +69,7 @@ def _ai_providers(load, monkeypatch, models=CONFIGURED):
 
 
 def _baseline_request(system="You are Omega. HISTORY: none yet"):
-    """A fixed request built with the API 030c0144 already has, so the
+    """A fixed request built with the API c193ab3 already has, so the
     snapshot can be generated there."""
     send = LLMTool().with_name("send").with_description("Send a message").add_parameter(LLMToolParameter().with_name("content"))
     call = LLMToolCall().with_name("send").with_id("call_1").with_arguments({"content": "hello"})
@@ -97,7 +97,7 @@ def test_set_model_reaches_the_raw_request(plugins, monkeypatch):
 
 def test_unset_model_keeps_the_baseline_raw_request(plugins, monkeypatch):
     """R3-T2 (A1): with no model named, the configured model is sent and the
-    whole raw request equals the one 030c0144 builds."""
+    whole raw request equals the one c193ab3 builds."""
     snapshot = ast.literal_eval(SNAPSHOT.read_text())
     assert set(snapshot) == set(CONFIGURED)
     for name, provider in _ai_providers(plugins, monkeypatch).items():
