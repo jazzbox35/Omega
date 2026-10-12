@@ -217,6 +217,12 @@ def test_test_with_no_model_key_is_answered_through_the_hook(clean, monkeypatch)
     logger_mod = types.ModuleType("src.logger")
     logger_mod.get_logger = lambda name: logging.getLogger(name)
     monkeypatch.setitem(sys.modules, "src.logger", logger_mod)
+    # tests/pytest.sh runs on the CI host, where requirements.txt is not installed;
+    # with providers/ on sys.path, `import openai` would load providers/openai.py.
+    # No test here constructs a client, so a stand-in package is enough.
+    openai_mod = types.ModuleType("openai")
+    openai_mod.OpenAI = object
+    monkeypatch.setitem(sys.modules, "openai", openai_mod)
     monkeypatch.setattr(sys, "path", sys.path + [str(PROVIDERS)])
     spec = importlib.util.spec_from_file_location("omega_plugin_mockprovider", PROVIDERS / "mockprovider.py")
     module = importlib.util.module_from_spec(spec)
