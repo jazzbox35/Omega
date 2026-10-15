@@ -110,23 +110,25 @@
                                        ($_ (log INFO "loop" (RESPONSE: (py-str ($response)))))
                                        ($respstr (py-call (providers.llmResponseToSExpr $response)))
                                        ($resp (catch (sread $respstr)))
-                                       ($_ (change-state! &error ()))
                                        ($_ (log INFO "loop" (RESPONSE: $resp)))
+                                       ($_ (change-state! &error ()))
                                        ($_ (messagesClear))
-                                       ($_ (messagesAppend (llmToolCallMessage role "assistant"
-                                                                               calls (llmResponseCalls $response)
-                                                                               content "[TOOL CALL]")))
-                                       ($sexpr (collapse
-                                             (let ($callid $s) (superpose $resp)
-                                               (let $result
-                                                 (if (HandleError $s $error) $error
-                                                   (let $rc (catch (let $R (eval $s) (py-call (helper.normalize_string $R))))
-                                                     (if (HandleError $rc $error) $error (strings-concat ("SUCCESS, RETURN: " $rc)))))
-                                                 (progn
-                                                   ($_ (log INFO "loop" (COMMAND_RETURN: ($s $result))))
-                                                   (messagesAppend (llmToolCallResponseMessage role "tool" callid $callid content (last_chars $result (maxFeedback))))
-                                                   (quote $s)))))))
-                                       (if (or $msgnew  (not (== $sexpr ()))) (addToHistory $msg $sexpr $msgnew) _))
+                                       ($sexpr (if (HandleError (quote $resp) $error)
+                                                 $error
+                                                 (progn (messagesAppend (llmToolCallMessage role "assistant"
+                                                                                           calls (llmResponseCalls $response)
+                                                                                           content "[TOOL CALL]"))
+                                                   (collapse
+                                                         (let ($callid $s) (superpose $resp)
+                                                           (let $result
+                                                             (if (HandleError (quote $s) $error) $error
+                                                               (let $rc (catch (let $R (collapse (eval $s)) (py-call (helper.normalize_string $R))))
+                                                                 (if (HandleError $rc $error) $error (strings-concat ("SUCCESS, RETURN: " $rc)))))
+                                                             (progn
+                                                               ($_ (log INFO "loop" (COMMAND_RETURN: ((quote $s) $result))))
+                                                               (messagesAppend (llmToolCallResponseMessage role "tool" callid $callid content (last_chars $result (maxFeedback))))
+                                                               (quote $s)))))))))
+                                           (if (or $msgnew  (not (== $sexpr ()))) (addToHistory $msg $sexpr $msgnew) _))
                                 (if (> (get_time) (get-state &nextWakeAt))
                                     (change-state! &loops (+ 1 (maxWakeLoops))) _)))
                       (sleep (sleepInterval))

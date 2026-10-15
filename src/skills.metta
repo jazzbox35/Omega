@@ -28,6 +28,11 @@
    (let $text (strings-concat ($description ": " $function " " (join " " $arguments)))
      (progn
        (log INFO "skills" (strings-concat ("Add skill: " $text)))
+       (if (== () (collapse (match &self (dynamic-skill $function $info) FOUND)))
+         ()
+         (progn
+           (log INFO "skill" "Re-add skill, removing previous instance")
+           (remove-skill $function)))
        (add-atom &self (dynamic-skill $function ($function $description $arguments))) )))
 
 ; Remove skill from the list of skills available to the agent.
@@ -145,5 +150,6 @@
 !(add-skill send "To send a message to the user but keep yourself very brief." (content))
 !(add-skill websearch "Search the internet for content." (content))
 !(add-skill version "To get the Omega version number" ())
+!(add-skill nop "Perform no action." ())
 !(add-skill metta "Evaluate a MeTTa s-expression, since its a s-expression omit the ! in the beginning. Use (add-atom &persistent X) to add X to space, same for remove-atom." (sexpression))
 ; TODO add load-plugin/unload-plugin skills
