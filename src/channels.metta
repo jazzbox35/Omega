@@ -25,5 +25,8 @@
 (= (send $msg)
    (if (!= $msg (get-state &lastsend))
        (progn (change-state! &lastsend $msg)
-              (let $safemsg (string-replace $msg  "\n" "\\n")
-                   (let $temp (cut) (commChannelSend $safemsg)))) _))
+              ; BEGIN DEBUG: append cumulative calls per router role to send.
+              (let $debugmsg (py-call (providers.debugRouterCallTotals $msg))
+              ; END DEBUG
+              (let $safemsg (string-replace $debugmsg  "\n" "\\n")
+                   (let $temp (cut) (commChannelSend $safemsg))))) _))

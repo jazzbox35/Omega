@@ -2,6 +2,10 @@ import config
 import logging
 from typing import List
 import json
+import copy
+import os
+from pathlib import Path
+from router_catalog import normalize_catalog
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +145,9 @@ class LLMRequest:
         self.reasoning_mode = config.config_get_by_key("reasoningMode")
         self.tools = []
         self.tool_by_name = {}
+        self.provider = ""
+        self.model = ""
+        self.router = "none"
 
     def add_message(self, message):
         self.messages.append(message)
@@ -231,20 +238,189 @@ def registerLLMProvider(id: str, provider: LLMProvider) -> None:
     _llmProviderRegistry[id] = provider
 
 _llmprovider: LLMProvider = None
+_catalogue = {}
+_role_providers = {}
+_llmRouterRegistry = set()
+_router = "none"
+_last_outcome = None
+
+# BEGIN DEBUG: cumulative provider calls by catalog role (since startup).
+_debug_role_calls = {}
+
+
+def debugRouterCallTotals(message):
+    roles = dict.fromkeys([*_catalogue, *_debug_role_calls])
+    totals = ", ".join(f"{role}={_debug_role_calls.get(role, 0)}" for role in roles)
+    return f"{message}\n[DEBUG router calls: {totals or 'none'}]"
+# END DEBUG
+
+
+def registerLLMRouter(name):
+    """A MeTTa plugin registers its function separately under this name."""
+    name = str(name)
+    if name in _llmRouterRegistry:
+        raise ValueError(f"Router {name!r} is already registered")
+    _llmRouterRegistry.add(name)
+    return name
+
+
+def llmRouterStart():
+    global _router
+    configured = config.config_get_by_key("router")
+    _router = str(configured or ("default" if len(_catalogue) > 1 else "none"))
+    if len(_catalogue) == 1:
+        _router = "none"
+    if _router not in ("none", "default"):
+        raise ValueError("Phase 1 supports router=default or router=none")
+    if _router != "none" and _router not in _llmRouterRegistry:
+        raise ValueError(f"Router {_router!r} is not registered")
+    if _router == "default" and "premium" not in _catalogue:
+        raise ValueError("The default router requires a premium catalog record")
+    return _router
+
+
+def llmRoutingEnabled():
+    return _router != "none"
+
+
+def llmCatalogueGet():
+    """Give plugins a copy of named records, without credentials."""
+    return copy.deepcopy(list(_catalogue.values()))
+
+
+def llmLastOutcome():
+    return _last_outcome
 
 def llmProviderStart(provider):
-    """Select and start one of the LLM providers registered by plugins"""
-    global _llmprovider
+    """Start an independent provider instance for every catalog record."""
+    global _llmprovider, _catalogue, _role_providers, _last_outcome
+    for instance in _role_providers.values():
+        instance.stop()
+    _role_providers = {}
+    _catalogue = {}
+    _last_outcome = None
+    # BEGIN DEBUG: reset totals when provider setup starts.
+    _debug_role_calls.clear()
+    # END DEBUG
+    from router_policy import reset
+    reset()
+    catalog_file = config.config_get_by_key("router_catalog_file")
+    raw = (Path(catalog_file).read_text(encoding="utf-8") if catalog_file
+           else config.config_get_by_key("router_catalog"))
+    if raw:
+        _catalogue = normalize_catalog(
+            raw, first_only=config.config_get_by_key("router") == "none")
+        try:
+            for role, record in _catalogue.items():
+                prototype = _llmProviderRegistry.get(record["provider"])
+                if prototype is None:
+                    raise ValueError(f"Provider {record['provider']!r} is not registered")
+                instance = copy.deepcopy(prototype)
+                params = record["litellm_params"]
+                values = {
+                    "api_token_var": record["api_token_var"],
+                    "provider_gateway_route": record["gateway_route"],
+                    "provider_api_base": params["api_base"],
+                    "openaiapi_url": params["api_base"],
+                }
+                # Direct standalone calls can use a literal key or environment
+                # reference. Container catalogs have already been scrubbed.
+                key = record.get("token", params.get("api_key", ""))
+                if key.startswith("os.environ/"):
+                    key = os.environ.get(key[len("os.environ/"):], "")
+                values["provider_api_key"] = key or None
+                if record["model"]:
+                    values["model"] = record["model"]
+                with config.provider_config(values):
+                    instance.start()
+                # Materialize provider defaults so router choices name the exact model.
+                delegate = getattr(instance, "delegate", None)
+                record["model"] = getattr(delegate, "_model_name", record["model"])
+                prefix = params["model"].partition("/")[0]
+                params["model"] = f"{prefix}/{record['model']}"
+                record.pop("token", None)
+                params["api_key"] = f"os.environ/OMEGA_ROUTER_{role.upper()}_API_KEY"
+                _role_providers[role] = instance
+        except Exception:
+            for instance in _role_providers.values():
+                instance.stop()
+            _role_providers = {}
+            raise
+        _llmprovider = next(iter(_role_providers.values()))
+        return
+
+    # Preserve standalone installations configured with only provider/model.
     _llmprovider = _llmProviderRegistry.get(provider, None)
     if _llmprovider is None:
         error = f"llmProviderStart: LLM provider plugin {provider} is not registered"
         logger.error(error)
         raise RuntimeError(error)
     _llmprovider.start()
+    model = getattr(getattr(_llmprovider, "delegate", None), "_model_name", "")
+    _catalogue = {"routine": {"model_name": "routine", "provider": provider,
+                              "model": model, "litellm_params": {"model": model}}}
+    _role_providers = {"routine": _llmprovider}
+
+
+def llmProviderChatRouted(request, selection):
+    """Validate the router's explicit provider/model, then dispatch unchanged.
+
+    A role may accompany the pair to disambiguate credentials and endpoints.
+    A bare pair is accepted only when it identifies exactly one catalog record.
+    """
+    role = None
+    if isinstance(selection, dict):
+        provider, model = selection.get("provider"), selection.get("model")
+        role = selection.get("role")
+    elif isinstance(selection, (tuple, list)) and len(selection) == 2:
+        provider, model = selection
+    else:
+        return llmRouterRaised("Router must return an explicit provider and model")
+    if not isinstance(provider, str) or not isinstance(model, str):
+        return llmRouterRaised("Router provider and model must be strings")
+    matches = [name for name, record in _catalogue.items()
+               if (record["provider"], record["model"]) == (provider, model)
+               and (role is None or name == role)]
+    if len(matches) != 1:
+        return llmRouterRaised("Router provider/model selection is absent or ambiguous in the catalog")
+    return _llmProviderChatRecord(request, matches[0], provider, model)
+
+
+def _llmProviderChatRecord(request, role, provider, model):
+    """Execute an already selected record, including the routine-only path."""
+    global _last_outcome
+    request.provider = provider
+    request.model = model
+    request.router = _router
+    logger.info("LLM routing: role=%s provider=%s model=%s", role, request.provider, request.model)
+    # BEGIN DEBUG: count each harness call, including failed calls, once.
+    _debug_role_calls[role] = _debug_role_calls.get(role, 0) + 1
+    # END DEBUG
+    try:
+        response = _validate_response(request, _role_providers[role].chat(request))
+    except Exception:
+        logger.exception("Exception while calling catalog role %s", role)
+        response = LLMResponse().with_error(f"Provider call failed for role {role}")
+    _last_outcome = {"role": role, "error": response.error,
+                     "failed": response.is_error() or any(call.is_error() for call in response.calls)}
+    return response
+
+def llmRouterRaised(error):
+    global _last_outcome
+    logger.error("Router failed; no provider called: %s", error)
+    _last_outcome = {"failed": True, "error": str(error)}
+    return LLMResponse().with_error("Router failed to select a valid catalog record")
 
 def llmProviderChat(request):
     """Chat via selected LLM provider"""
+    if _catalogue:
+        role = next(iter(_catalogue)) if _router == "none" else "routine"
+        record = _catalogue[role]
+        return _llmProviderChatRecord(request, role, record["provider"], record["model"])
     global _llmprovider
+    # BEGIN DEBUG: cover legacy calls made without a catalog.
+    _debug_role_calls["routine"] = _debug_role_calls.get("routine", 0) + 1
+    # END DEBUG
     try:
         response = _llmprovider.chat(request)
         return _validate_response(request, response)

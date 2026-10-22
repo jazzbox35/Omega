@@ -3,6 +3,8 @@ import logging
 import pathlib
 import re
 import yaml
+from contextlib import contextmanager
+from contextvars import ContextVar
 
 logger = logging.getLogger(__name__)
 
@@ -10,6 +12,17 @@ _REPO = pathlib.Path(__file__).parent.parent.resolve()
 _CONFIG = {}
 _COMMAND_LINE = {}
 _CONFIG_FILE = {}
+_OVERRIDES = ContextVar("provider_config_overrides", default={})
+
+
+@contextmanager
+def provider_config(values):
+    """Configure one provider instance without changing global configuration."""
+    token = _OVERRIDES.set(values)
+    try:
+        yield
+    finally:
+        _OVERRIDES.reset(token)
 
 _INTEGER_LITERAL = re.compile(r"^[+-]?(?:0|[1-9][0-9]*)$")
 _FLOAT_LITERAL = re.compile(
@@ -39,6 +52,8 @@ def config_get_by_key(key, default=None):
     parameters, (2) environment variable with OMEGA_$key name, (3)
     configuration file, (4) use $default value."""
     global _CONFIG, _COMMAND_LINE, _CONFIG_FILE
+    if key in _OVERRIDES.get():
+        return _OVERRIDES.get()[key]
     if key in _COMMAND_LINE:
         value = _COMMAND_LINE[key]
         expected = default if default is not None else _CONFIG_FILE.get(key)
@@ -64,7 +79,8 @@ def config_get_by_key(key, default=None):
 def _cache_config(key, value, source):
     global _CONFIG
     _CONFIG[key] = value
-    logger.info(f"Configuration item resolved using {source}: {key}={value}")
+    logged_value = "[hidden]" if key in ("router_catalog", "provider_api_key") else value
+    logger.info(f"Configuration item resolved using {source}: {key}={logged_value}")
     return value
 
 def _command_line_value(value):

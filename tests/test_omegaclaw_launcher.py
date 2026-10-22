@@ -101,7 +101,11 @@ def test_installer_preserves_volume_and_explicit_export_setting(tmp_path, monkey
     monkeypatch.setitem(installer, "require_license_acceptance", lambda: None)
     monkeypatch.setitem(installer, "_choose_channel", lambda: {"commchannel": "test"})
     monkeypatch.setitem(
-        installer, "_choose_provider", lambda: ("Test", "Local", "TEST_SERVER_IP", "", "", "localhost")
+        installer, "_choose_model_setup", lambda: {"routine": {
+            "provider": "Test", "embeddingprovider": "Local",
+            "api_token_var": "TEST_SERVER_IP", "model": "",
+            "openaiapi_url": "", "token": "localhost",
+        }}
     )
     monkeypatch.setitem(installer, "_choose_import_kb", lambda: "0")
     monkeypatch.setattr(
@@ -112,6 +116,13 @@ def test_installer_preserves_volume_and_explicit_export_setting(tmp_path, monkey
     installer["config_run_omega"](str(output), "test-archives", enabled)
 
     config = output.read_text(encoding="utf-8")
+    import json
+    import shlex
+    values = dict(line.split("=", 1) for line in shlex.split(config))
+    catalog = json.loads(values["router_catalog"])
+    assert list(catalog) == ["routine"]
+    assert catalog["routine"]["provider"] == "Test"
+    assert values["routine_provider"] == values["provider"] == "Test"
     assert "memory_transfer_volume_name=test-archives\n" in config
     assert f"memory_export_enabled={enabled}\n" in config
 
@@ -447,3 +458,27 @@ def test_removed_component_options_are_rejected(tmp_path, removed_option):
     assert result.returncode != 0
     assert "Usage:" in result.stdout
     assert "docker <" not in result.stdout
+
+
+@pytest.mark.parametrize("dual", [False, True])
+def test_router_catalog_labels_default_and_preserves_independent_selections(monkeypatch, dual):
+    installer = _load_installer_namespace()
+    roles = []
+    def choose(role=None):
+        roles.append(role)
+        return {
+            "provider": "Anthropic" if role == "premium" else "OpenAI",
+            "embeddingprovider": "Local", "api_token_var": "TEST_API_KEY",
+            "model": role or "", "openaiapi_url": "", "token": "test-token",
+        }
+    monkeypatch.setitem(installer, "_choose_provider", choose)
+    monkeypatch.setattr("builtins.input", lambda _: "y" if dual else "n")
+
+    catalog = installer["_choose_model_setup"]()
+
+    assert list(catalog) == (["routine", "premium"] if dual else ["routine"])
+    assert catalog["routine"]["provider"] == "OpenAI"
+    assert roles == (["routine", "premium"] if dual else [None])
+    if dual:
+        assert catalog["premium"]["provider"] == "Anthropic"
+        assert catalog["premium"] is not catalog["routine"]

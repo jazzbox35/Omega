@@ -234,7 +234,9 @@ class AIProvider(AbstractAIProvider):
         super().__init__(name)
         self._var_name = var_name
         self._model_name = model_name
-        self._base_url = base_url
+        self._base_url = config_get_by_key("provider_api_base") or base_url
+        self._gateway_route = config_get_by_key("provider_gateway_route") or name.lower()
+        self._api_key = config_get_by_key("provider_api_key")
         self._client = None  # lazy initialization
         self._timeout_notice_sent = False
 
@@ -282,7 +284,7 @@ class AIProvider(AbstractAIProvider):
         """Create OpenAI client from environment."""
         proxy_url = config_get_by_key("GATEWAY_URL")
         if proxy_url:
-            prefix = self._name.lower()
+            prefix = self._gateway_route
             base_url = f"{proxy_url.rstrip('/')}/{prefix}/"
             logger.info(f"[AIProvider._create_client]: Connecting via proxy: {base_url}")
             return openai.OpenAI(
@@ -291,8 +293,8 @@ class AIProvider(AbstractAIProvider):
                     max_retries=CHAT_MAX_RETRIES,
                     timeout=CHAT_REQUEST_TIMEOUT_SECONDS,
                     )
-        if self._var_name in os.environ:
-            return openai.OpenAI(api_key=os.environ.get(self._var_name), base_url=self._base_url,
+        if self._api_key or self._var_name in os.environ:
+            return openai.OpenAI(api_key=self._api_key or os.environ.get(self._var_name), base_url=self._base_url,
                                  max_retries=CHAT_MAX_RETRIES,
                                  timeout=CHAT_REQUEST_TIMEOUT_SECONDS)
 
@@ -301,7 +303,7 @@ class AIProvider(AbstractAIProvider):
     @property
     def is_available(self) -> bool:
         """Check if provider is configured (without initializing)."""
-        return bool(config_get_by_key("GATEWAY_URL")) or bool(os.environ.get(self._var_name))
+        return bool(config_get_by_key("GATEWAY_URL")) or bool(self._api_key) or bool(os.environ.get(self._var_name))
 
     def convert_message(self, message: LLMMessage) -> Dict:
         result = { "role": message.role, "content": message.content }

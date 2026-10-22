@@ -1,8 +1,34 @@
+(: registerLLMRouter (-> Atom Atom Expression))
+(= (registerLLMRouter $name $function)
+   (let $id (py-call (providers.registerLLMRouter $name))
+     (progn
+       (add-atom &self (llmRouter $id $function))
+       ())))
+
+(= (llmRouterStart)
+   (let $id (py-call (providers.llmRouterStart))
+     (if (py-call (providers.llmRoutingEnabled))
+         (change-state! &llmRouter
+           (match &self (llmRouter $id $function) $function))
+         ())))
+
 (= (llmProviderStart $provider)
-   (py-call (providers.llmProviderStart $provider)))
+   (progn
+     (py-call (providers.llmProviderStart $provider))
+     (llmRouterStart)))
 
 (= (llmProviderChat $request)
-     (py-call (providers.llmProviderChat $request)))
+   (if (py-call (providers.llmRoutingEnabled))
+       (let $answer (catch
+                      (let $function (get-state &llmRouter)
+                        ($function $request
+                          (py-call (providers.llmCatalogueGet))
+                          (py-call (providers.llmLastOutcome)))))
+         (case $answer
+           (((Error $call $message)
+             (py-call (providers.llmRouterRaised (swrite $answer))))
+            ($selection (py-call (providers.llmProviderChatRouted $request $selection))))))
+       (py-call (providers.llmProviderChat $request))))
 
 (= (llmRequestMessage role $role content $content)
    (py-call (providers.llmRequestMessage $role $content)))

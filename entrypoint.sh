@@ -39,6 +39,24 @@ export EMBEDDING_PROVIDER EMBEDDING_MODEL OPENAIAPI_URL MM_URL OPENCLAW_URL
 
 agent_su=(su --group nogroup nobody)
 
+# Prepare per-role routes while credentials are still available. The agent gets
+# only the sanitized catalog; nginx retains the credentials in its private file.
+catalog_file=$(python3 "${OMEGA_DIR}/src/router_catalog.py" \
+    /opt/nginx/router.conf /tmp/omega-router-catalog.json "$@")
+chown www-data:www-data /opt/nginx/router.conf
+if [[ -n "$catalog_file" ]]; then
+  # Replace the incoming catalog with its credential-free file reference before
+  # forwarding arguments to the agent.
+  catalog_args=()
+  for arg in "$@"; do
+    case "$arg" in
+      router_catalog=*|router_catalog_file=*) ;;
+      *) catalog_args+=("$arg") ;;
+    esac
+  done
+  set -- "${catalog_args[@]}" "router_catalog_file=$catalog_file"
+fi
+
 su www-data -s /bin/sh -c "sh /opt/nginx/nginx.sh"
 
 # Optional knowledge-base import
@@ -99,4 +117,4 @@ for var in $SAFE_VARS; do
   fi
 done
 
-exec env -i $env_args "${agent_su[@]}" -s /bin/sh -c "sh run.sh run.metta GATEWAY_URL=\"http://localhost:8080\" $*"
+exec env -i $env_args "${agent_su[@]}" -s /bin/sh -c 'exec sh run.sh run.metta GATEWAY_URL=http://localhost:8080 "$@"' sh "$@"

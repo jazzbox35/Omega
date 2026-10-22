@@ -10,6 +10,16 @@ sleepInterval: 1
 #model: 
 # LLM provider id, see the list below in the Providers section
 provider: Anthropic
+# Router catalog: either the installer's role-keyed records or LiteLLM-style
+# model_list records. The container entrypoint builds credential-isolated routes.
+# For standalone installs, put the same JSON catalog in router_catalog_file.
+router_catalog: {}
+router_catalog_file: ""
+# Empty selects default for multiple records, none for routine only.
+router: ""
+router_premium_turns: 3
+router_escalate_keywords: "premium,premium_model,alert_failure,alert_failed,error"
+router_escalate_items: 9
 # Output cap passed to the provider
 maxOutputToken: 6000
 # Reasoning-effort hint passed to the provider
