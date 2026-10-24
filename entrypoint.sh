@@ -12,19 +12,21 @@ cd /PeTTa
 
 EMBEDDING_PROVIDER="${EMBEDDING_PROVIDER:-Local}"
 EMBEDDING_MODEL="${EMBEDDING_MODEL:-}"
-OPENAIAPI_URL="http://localhost:8080/" # dummy value
 MM_URL="http://localhost:8080/" # dummy value
 OPENCLAW_URL="http://localhost:8080/" # dummy value
+router_catalog=""
+agent_args=()
 for arg in "$@"; do
+  case "$arg" in
+    router_catalog=*) router_catalog="${arg#*=}"; continue ;;
+    router_catalog_file=*|openaiapi_url=*) continue ;;
+  esac
+  agent_args+=("$arg")
   if [[ "$arg" == embeddingprovider=* ]]; then
     EMBEDDING_PROVIDER="${arg#*=}"
   fi
   if [[ "$arg" == embeddingModel=* ]]; then
     EMBEDDING_MODEL="${arg#*=}"
-  fi
-  # URL to redirect OpenAIAPI provider requests
-  if [[ "$arg" == openaiapi_url=* ]]; then
-    OPENAIAPI_URL=$(nginx_url "${arg#*=}")
   fi
   # URL to redirect Mattermost communication channel requests
   if [[ "$arg" == MM_URL=* ]]; then
@@ -35,7 +37,18 @@ for arg in "$@"; do
     OPENCLAW_URL=$(nginx_url "${arg#*=}")
   fi
 done
-export EMBEDDING_PROVIDER EMBEDDING_MODEL OPENAIAPI_URL MM_URL OPENCLAW_URL
+export EMBEDDING_PROVIDER EMBEDDING_MODEL MM_URL OPENCLAW_URL
+
+if [[ -z "$router_catalog" ]]; then
+  echo "router_catalog is required for nginx LLM configuration" >&2
+  exit 1
+fi
+catalog_file=/tmp/omega-router-catalog.metta
+printf '%s' "$router_catalog" | python3 "${OMEGA_DIR}/src/router_catalog.py" \
+  /opt/nginx/router.conf "$catalog_file" "$EMBEDDING_PROVIDER"
+chown www-data:www-data /opt/nginx/router.conf
+set -- "${agent_args[@]}" "router_catalog_file=$catalog_file"
+unset router_catalog agent_args arg
 
 agent_su=(su --group nogroup nobody)
 
@@ -91,12 +104,19 @@ SAFE_VARS="HOME USER PATH HOSTNAME TERM LANG LC_ALL \
   HF_HOME SENTENCE_TRANSFORMERS_HOME HF_HUB_OFFLINE TRANSFORMERS_OFFLINE \
   CHROMA_DB_PATH EMBEDDING_PROVIDER OMEGA_DIR MEMORY_DIR TEST_SERVER_IP"
 
-env_args=""
+env_args=()
 for var in $SAFE_VARS; do
   eval val=\${$var:-}
   if [ -n "$val" ]; then
-    env_args="$env_args $var=$val"
+    env_args+=("$var=$val")
   fi
 done
 
-exec env -i $env_args "${agent_su[@]}" -s /bin/sh -c "sh run.sh run.metta GATEWAY_URL=\"http://localhost:8080\" $*"
+printf 'Environment passed to agent:\n'
+printf '  %q\n' "${env_args[@]}"
+printf 'run.metta arguments:\n'
+printf '  %q\n' 'GATEWAY_URL=http://localhost:8080' "$@"
+printf 'Sanitized MeTTa catalog:\n'
+cat -- "$catalog_file"
+
+exec env -i "${env_args[@]}" "${agent_su[@]}" -s /bin/sh -c 'exec sh run.sh run.metta GATEWAY_URL=http://localhost:8080 "$@"' sh "$@"
